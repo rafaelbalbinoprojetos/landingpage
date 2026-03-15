@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="scroll-smooth">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EPICBYTE | Sistema Operacional das Empresas Modernas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg-main: #02040d;
+        --bg-secondary: #070d1d;
+        --text-main: #e2e8f0;
+        --text-muted: #94a3b8;
+        --accent-cyan: #67e8f9;
+        --accent-blue: #60a5fa;
+        --accent-violet: #a78bfa;
+        --card: rgba(10, 18, 34, 0.72);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+        color: var(--text-main);
+        font-family: 'Inter', sans-serif;
+        background:
+          radial-gradient(900px 540px at 8% 8%, rgba(34, 211, 238, 0.12), transparent 58%),
+          radial-gradient(900px 560px at 88% 0%, rgba(96, 165, 250, 0.14), transparent 58%),
+          radial-gradient(740px 500px at 65% 40%, rgba(167, 139, 250, 0.1), transparent 66%),
+          linear-gradient(180deg, var(--bg-secondary) 0%, #040815 45%, var(--bg-main) 100%);
+      }
+
+      .font-display {
+        font-family: 'Sora', sans-serif;
+      }
+
+      .glass {
+        background: var(--card);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      .text-gradient {
+        background: linear-gradient(90deg, var(--accent-cyan) 0%, var(--accent-blue) 50%, var(--accent-violet) 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+      }
+
+      @keyframes text-gradient-shift {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+      }
+
+      .text-gradient-animated {
+        background: linear-gradient(100deg, #56ccf2 0%, #7b9cff 45%, #9f7aea 80%, #56ccf2 100%);
+        background-size: 220% 220%;
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        animation: text-gradient-shift 9s ease-in-out infinite;
+      }
+
+      .eyebrow {
+        color: #bae6fd;
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.2em;
+        font-weight: 700;
+      }
+
+      .bg-grid {
+        background-image: radial-gradient(circle at 1px 1px, rgba(148, 163, 184, 0.12) 1px, transparent 0);
+        background-size: 30px 30px;
+      }
+
+      .orb {
+        position: absolute;
+        pointer-events: none;
+        border-radius: 999px;
+        filter: blur(90px);
+      }
+
+      .orb-cyan {
+        width: 360px;
+        height: 360px;
+        top: 12%;
+        right: -90px;
+        background: rgba(34, 211, 238, 0.22);
+      }
+
+      .orb-blue {
+        width: 440px;
+        height: 440px;
+        bottom: -140px;
+        left: -130px;
+        background: rgba(59, 130, 246, 0.16);
+      }
+
+      .orb-violet {
+        width: 320px;
+        height: 320px;
+        top: 26%;
+        left: 42%;
+        background: rgba(139, 92, 246, 0.16);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
