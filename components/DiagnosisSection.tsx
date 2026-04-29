@@ -7,11 +7,15 @@ const defaultInput =
   'Descreva sua operação, problemas ou processos manuais...';
 
 type DiagnosisResult = {
-  diagnosis: string;
-  causes: string[];
-  impacts: string[];
-  architecture: string[];
-  cta: string;
+  initialDiagnosis: string;
+  epicByteApproach: string;
+  developmentPlan: string[];
+  recommendedTechnologies: string[];
+  expectedFeatures: string[];
+  timeEstimate: string;
+  investmentEstimate: string;
+  evolutionOpportunities: string[];
+  nextStep: string;
 };
 
 const DiagnosisSection: React.FC = () => {
@@ -61,7 +65,7 @@ const DiagnosisSection: React.FC = () => {
           <SectionIntro
             eyebrow="Diagnóstico assistido"
             title="Diagnóstico estratégico com IA"
-            description="Descreva o gargalo da sua operação e receba uma análise inicial sobre causas, impactos e a arquitetura sugerida."
+            description="Descreva a solicitação do cliente e receba uma leitura consultiva com arquitetura proposta, stack recomendada, prazo estimado e faixa de investimento."
             titleClassName="max-w-4xl mb-6"
             descriptionClassName="max-w-4xl"
           />
@@ -79,7 +83,7 @@ const DiagnosisSection: React.FC = () => {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   rows={7}
-                  placeholder={defaultInput}
+                  placeholder="Descreva a solicitacao do cliente, o contexto do negocio e o que precisa ser construido..."
                   className="w-full resize-none bg-transparent text-sm leading-relaxed text-slate-100 placeholder:text-slate-500 focus:outline-none"
                 />
               </div>
@@ -103,19 +107,27 @@ const DiagnosisSection: React.FC = () => {
             <div className="glass rounded-[2rem] border-white/10 p-6 md:p-7 h-full">
               <div className="mb-5 flex items-center gap-3 text-cyan-200">
                 <Sparkles size={18} />
-                <p className="text-xs uppercase tracking-[0.16em]">Leitura estratégica inicial</p>
+                <p className="text-xs uppercase tracking-[0.16em]">Resposta consultiva estruturada</p>
               </div>
 
               {result ? (
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 md:col-span-2">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500 mb-2">Diagnóstico</p>
-                    <p className="text-slate-100 leading-relaxed">{result.diagnosis}</p>
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500 mb-2">Diagnóstico inicial</p>
+                    <p className="text-slate-100 leading-relaxed">{result.initialDiagnosis}</p>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500 mb-3">Causas</p>
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500 mb-2">Abordagem da EpicByte</p>
+                    <p className="text-sm leading-relaxed text-slate-300">{result.epicByteApproach}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500 mb-3">Estimativa de tempo</p>
+                    <p className="text-sm leading-relaxed text-slate-300">{result.timeEstimate}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 md:col-span-2">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500 mb-3">Como seria desenvolvido</p>
                     <div className="space-y-3">
-                      {result.causes.map((item) => (
+                      {result.developmentPlan.map((item) => (
                         <p key={item} className="text-sm leading-relaxed text-slate-300">
                           {item}
                         </p>
@@ -123,27 +135,41 @@ const DiagnosisSection: React.FC = () => {
                     </div>
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500 mb-3">Impactos</p>
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500 mb-3">Tecnologias recomendadas</p>
                     <div className="space-y-3">
-                      {result.impacts.map((item) => (
+                      {result.recommendedTechnologies.map((item) => (
                         <p key={item} className="text-sm leading-relaxed text-slate-300">
+                          {item}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500 mb-3">Funcionalidades esperadas</p>
+                    <div className="space-y-3">
+                      {result.expectedFeatures.map((item) => (
+                        <p key={item} className="text-sm leading-relaxed text-slate-100">
                           {item}
                         </p>
                       ))}
                     </div>
                   </div>
                   <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-4 md:col-span-2">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-cyan-100 mb-3">Arquitetura sugerida</p>
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-cyan-100 mb-3">Estimativa de investimento</p>
+                    <p className="text-sm leading-relaxed text-slate-100">{result.investmentEstimate}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 md:col-span-2">
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500 mb-3">Oportunidades de evolução</p>
                     <div className="space-y-3">
-                      {result.architecture.map((item) => (
-                        <p key={item} className="text-sm leading-relaxed text-slate-100">
+                      {result.evolutionOpportunities.map((item) => (
+                        <p key={item} className="text-sm leading-relaxed text-slate-300">
                           {item}
                         </p>
                       ))}
                     </div>
                     <div className="mt-5 flex flex-col gap-3 border-t border-white/10 pt-4 sm:flex-row sm:items-center sm:justify-between">
                       <p className="text-sm text-slate-300">
-                        {result.cta}
+                        {result.nextStep}
                       </p>
                       <button
                         onClick={() => {
@@ -159,9 +185,9 @@ const DiagnosisSection: React.FC = () => {
               ) : (
                 <div className="flex h-full min-h-[22rem] items-center justify-center rounded-[1.5rem] border border-dashed border-white/10 bg-white/[0.02] p-6 text-center">
                   <div className="max-w-md">
-                    <p className="font-display text-2xl text-white">Descreva a operação para iniciar a leitura.</p>
+                    <p className="font-display text-2xl text-white">Descreva a solicitação para iniciar a análise.</p>
                     <p className="mt-3 text-sm leading-relaxed text-slate-400">
-                      O diagnóstico inicial organiza sintomas operacionais em linguagem de arquitetura, processo e decisão.
+                      A resposta organiza a demanda em arquitetura, desenvolvimento, stack, prazo, investimento e próximos passos.
                     </p>
                   </div>
                 </div>

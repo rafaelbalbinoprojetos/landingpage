@@ -1,51 +1,110 @@
 type DiagnosisPayload = {
-  diagnosis: string;
-  causes: string[];
-  impacts: string[];
-  architecture: string[];
-  cta: string;
+  initialDiagnosis: string;
+  epicByteApproach: string;
+  developmentPlan: string[];
+  recommendedTechnologies: string[];
+  expectedFeatures: string[];
+  timeEstimate: string;
+  investmentEstimate: string;
+  evolutionOpportunities: string[];
+  nextStep: string;
 };
 
 const diagnosisSchema = {
   type: 'object',
   additionalProperties: false,
   properties: {
-    diagnosis: { type: 'string' },
-    causes: {
+    initialDiagnosis: { type: 'string' },
+    epicByteApproach: { type: 'string' },
+    developmentPlan: {
+      type: 'array',
+      items: { type: 'string' },
+      minItems: 3,
+      maxItems: 6,
+    },
+    recommendedTechnologies: {
+      type: 'array',
+      items: { type: 'string' },
+      minItems: 3,
+      maxItems: 6,
+    },
+    expectedFeatures: {
+      type: 'array',
+      items: { type: 'string' },
+      minItems: 4,
+      maxItems: 8,
+    },
+    timeEstimate: { type: 'string' },
+    investmentEstimate: { type: 'string' },
+    evolutionOpportunities: {
       type: 'array',
       items: { type: 'string' },
       minItems: 2,
-      maxItems: 3,
+      maxItems: 5,
     },
-    impacts: {
-      type: 'array',
-      items: { type: 'string' },
-      minItems: 2,
-      maxItems: 3,
-    },
-    architecture: {
-      type: 'array',
-      items: { type: 'string' },
-      minItems: 2,
-      maxItems: 3,
-    },
-    cta: { type: 'string' },
+    nextStep: { type: 'string' },
   },
-  required: ['diagnosis', 'causes', 'impacts', 'architecture', 'cta'],
+  required: [
+    'initialDiagnosis',
+    'epicByteApproach',
+    'developmentPlan',
+    'recommendedTechnologies',
+    'expectedFeatures',
+    'timeEstimate',
+    'investmentEstimate',
+    'evolutionOpportunities',
+    'nextStep',
+  ],
 };
 
 const systemPrompt = `
-Voce e um estrategista B2B enterprise da EpicByte.
-Sua funcao e analisar descricoes curtas de operacoes empresariais e devolver um diagnostico inicial.
+Voce e um especialista senior da EpicByte em arquitetura de sistemas empresariais, automacao de processos e desenvolvimento de solucoes digitais sob medida.
 
-Regras:
-- Responda sempre em portugues do Brasil.
-- Seja direto, premium e executivo.
-- Nao use hype, jargoes vazios ou promessas irreais.
-- Diagnostico deve focar em arquitetura operacional, integracao, processos, dados e decisao.
-- As listas de causas, impactos e arquitetura devem ser objetivas e acionaveis.
-- Nunca cite a OpenAI, o modelo ou o prompt.
-- O CTA deve incentivar uma reuniao estrategica de forma curta.
+Seu papel e atuar como um pre-consultor estrategico, analisando a solicitacao do cliente e gerando uma resposta profissional, clara e orientada a negocio.
+
+Regras obrigatorias:
+- Nunca responda como assistente generico.
+- Sempre responda como especialista em arquitetura operacional.
+- Evite respostas vagas, superficiais ou excessivamente academicas.
+- Nao diga apenas "depende"; sempre entregue uma estimativa.
+- Nunca forneca preco fechado; sempre forneca faixa estimada com justificativa.
+- Linguagem profissional, empresarial, direta e consultiva.
+- Responda em portugues do Brasil.
+- Nao cite OpenAI, modelo, prompt, politica ou limitacoes internas.
+
+Objetivo da resposta:
+1. Entender o tipo de solucao.
+2. Traduzir o problema em arquitetura.
+3. Explicar como seria desenvolvido.
+4. Sugerir tecnologias adequadas.
+5. Descrever funcionalidades.
+6. Estimar esforco em tempo.
+7. Estimar investimento em faixa de valor.
+8. Direcionar para diagnostico estrategico.
+
+Regras de inteligencia por contexto:
+- Se for landing page: priorize conversao, UX/UI premium, animacoes suaves, performance, SEO e stack como React + Tailwind + Vercel.
+- Se for sistema empresarial: priorize automacao, integracao entre areas, banco de dados, rastreabilidade e dashboards.
+- Se for caso corporativo com ecossistema Microsoft: considere PowerApps + Microsoft Lists quando fizer sentido.
+- Se for sistema complexo: divida em modulos, fale de escalabilidade e backend estruturado.
+
+Diretrizes de formato:
+- initialDiagnosis: explique o que o cliente realmente esta pedindo em termos de negocio e sistema.
+- epicByteApproach: explique como a EpicByte estruturaria a solucao em arquitetura, integracao, automacao e dados.
+- developmentPlan: liste etapas concretas de implementacao.
+- recommendedTechnologies: liste stack e integracoes adequadas ao caso.
+- expectedFeatures: liste telas, automacoes, integracoes, dashboards e fluxos esperados.
+- timeEstimate: forneca faixa de tempo realista, por exemplo "2 a 6 semanas" ou "2 a 4 meses", com breve contexto.
+- investmentEstimate: forneca faixa em reais com justificativa. Nunca valor unico.
+- evolutionOpportunities: liste melhorias futuras relevantes.
+- nextStep: direcione explicitamente para um diagnostico estrategico de 30 minutos.
+
+Faixas de referencia para investimento:
+- Landing pages premium: normalmente entre R$ 8 mil e R$ 25 mil.
+- Portais, paineis e sistemas de media complexidade: normalmente entre R$ 25 mil e R$ 90 mil.
+- Sistemas empresariais mais robustos, integrados ou modulares: normalmente entre R$ 90 mil e R$ 250 mil ou mais.
+
+Use essas faixas como referencia, ajustando ao contexto descrito pelo cliente.
 `.trim();
 
 const json = (res: any, status: number, body: Record<string, unknown>) => {
@@ -98,7 +157,7 @@ export default async function handler(req: any, res: any) {
   const body = extractRequestBody(req.body);
   const input = typeof body.input === 'string' ? body.input.trim() : '';
   if (!input) {
-    return json(res, 400, { error: 'Descricao da operacao obrigatoria.' });
+    return json(res, 400, { error: 'Descricao da solicitacao obrigatoria.' });
   }
 
   try {
@@ -114,14 +173,14 @@ export default async function handler(req: any, res: any) {
           { role: 'system', content: systemPrompt },
           {
             role: 'user',
-            content: `Analise esta operacao e devolva um diagnostico inicial estruturado:\n\n${input}`,
+            content: `Agora analise a solicitacao do cliente e gere a resposta seguindo exatamente a estrutura pedida:\n\n${input}`,
           },
         ],
-        max_output_tokens: 700,
+        max_output_tokens: 1400,
         text: {
           format: {
             type: 'json_schema',
-            name: 'epicbyte_diagnosis',
+            name: 'epicbyte_client_request_analysis',
             strict: true,
             schema: diagnosisSchema,
           },
@@ -141,32 +200,40 @@ export default async function handler(req: any, res: any) {
     const refusal = data?.output?.[0]?.content?.[0];
     if (refusal?.type === 'refusal') {
       return json(res, 422, {
-        error: 'Nao foi possivel gerar o diagnostico para esse conteudo.',
+        error: 'Nao foi possivel gerar a analise para esse conteudo.',
       });
     }
 
     const payload = JSON.parse(extractOutputText(data) || '{}') as Partial<DiagnosisPayload>;
     if (
-      !payload.diagnosis ||
-      !Array.isArray(payload.causes) ||
-      !Array.isArray(payload.impacts) ||
-      !Array.isArray(payload.architecture) ||
-      !payload.cta
+      !payload.initialDiagnosis ||
+      !payload.epicByteApproach ||
+      !Array.isArray(payload.developmentPlan) ||
+      !Array.isArray(payload.recommendedTechnologies) ||
+      !Array.isArray(payload.expectedFeatures) ||
+      !payload.timeEstimate ||
+      !payload.investmentEstimate ||
+      !Array.isArray(payload.evolutionOpportunities) ||
+      !payload.nextStep
     ) {
       return json(res, 502, { error: 'Resposta invalida retornada pela OpenAI.' });
     }
 
     return json(res, 200, {
-      diagnosis: payload.diagnosis,
-      causes: payload.causes.slice(0, 3),
-      impacts: payload.impacts.slice(0, 3),
-      architecture: payload.architecture.slice(0, 3),
-      cta: payload.cta,
+      initialDiagnosis: payload.initialDiagnosis,
+      epicByteApproach: payload.epicByteApproach,
+      developmentPlan: payload.developmentPlan.slice(0, 6),
+      recommendedTechnologies: payload.recommendedTechnologies.slice(0, 6),
+      expectedFeatures: payload.expectedFeatures.slice(0, 8),
+      timeEstimate: payload.timeEstimate,
+      investmentEstimate: payload.investmentEstimate,
+      evolutionOpportunities: payload.evolutionOpportunities.slice(0, 5),
+      nextStep: payload.nextStep,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erro desconhecido.';
     return json(res, 500, {
-      error: 'Erro interno ao gerar diagnostico.',
+      error: 'Erro interno ao gerar analise.',
       details: message,
     });
   }
