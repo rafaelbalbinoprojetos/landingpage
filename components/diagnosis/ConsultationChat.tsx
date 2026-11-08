@@ -113,6 +113,7 @@ const ConsultationChat: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([initialAssistantMessage]);
   const [input, setInput] = useState('');
   const [quickReplies, setQuickReplies] = useState<string[]>(starterSuggestions);
+  const [progress, setProgress] = useState<DiagnosisApiResponse['progress'] | null>(null);
   const [proposal, setProposal] = useState<DiagnosisProposal | null>(null);
   const [pendingProposal, setPendingProposal] = useState<DiagnosisProposal | null>(null);
   const [leadInfo, setLeadInfo] = useState<LeadInfo | null>(() => loadStoredLead());
@@ -140,6 +141,7 @@ const ConsultationChat: React.FC = () => {
     setMessages([initialAssistantMessage]);
     setInput('');
     setQuickReplies(starterSuggestions);
+    setProgress(null);
     setProposal(null);
     setPendingProposal(null);
     setIsLeadCaptureVisible(false);
@@ -181,6 +183,7 @@ const ConsultationChat: React.FC = () => {
         setIsLoading(false);
       } else {
         setQuickReplies(data.quickReplies || []);
+        setProgress(data.progress || null);
       }
     } catch (submitError) {
       const message =
@@ -337,6 +340,10 @@ const ConsultationChat: React.FC = () => {
   };
 
   const handleSuggestion = (suggestion: string) => {
+    if (suggestion === 'Já respondi, gere a proposta') {
+      void sendMessage(suggestion);
+      return;
+    }
     setInput((current) => {
       const trimmed = current.trim();
       if (!trimmed) return suggestion;
@@ -452,6 +459,28 @@ const ConsultationChat: React.FC = () => {
             onToggleExpanded={() => setIsConversationExpanded((current) => !current)}
             scrollRef={chatScrollRef}
           />
+
+          {progress && !proposal && !pendingProposal ? (
+            <div
+              role="progressbar"
+              aria-label="Progresso do briefing"
+              aria-valuemin={0}
+              aria-valuemax={progress.total}
+              aria-valuenow={progress.current}
+              aria-valuetext={`Pergunta ${progress.current} de até ${progress.total}: ${progress.label}`}
+            >
+              <div className="flex items-center justify-between gap-3 text-xs text-fog">
+                <span>Pergunta {progress.current} de até {progress.total}</span>
+                <span className="text-ion">{progress.label}</span>
+              </div>
+              <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-ion to-iris transition-all duration-500"
+                  style={{ width: `${(progress.current / progress.total) * 100}%` }}
+                />
+              </div>
+            </div>
+          ) : null}
 
           {!proposal && !pendingProposal ? (
             <form onSubmit={handleSubmit} className="rounded-xl border border-white/15 bg-night/70 p-4 transition-colors duration-200 focus-within:border-ion/70">

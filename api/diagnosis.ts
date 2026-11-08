@@ -85,6 +85,7 @@ type DiagnosisResponse = {
     questionCount: number;
   };
   proposal: DiagnosisProposal | null;
+  progress?: { current: number; total: number; label: string };
 };
 
 type ProjectContext = {
@@ -597,10 +598,13 @@ REGRAS ABSOLUTAS:
 - Não use jargões técnicos na conversa. Fale como um consultor humano, direto e empático.
 - Não force landing page, dashboard, CRM, WhatsApp, agendamento, ecommerce ou automação sem o cliente ter dado sinal claro.
 - Se o cliente responder parcialmente, continue da etapa atual ou da próxima lacuna mais importante.
-- Os quickReplies devem ser específicos ao contexto atual, não genéricos.
+- Os quickReplies devem ser respostas diretas e clicáveis à pergunta que você acabou de fazer, adaptadas ao negócio do cliente. Nunca ofereça opções sobre outro assunto.
+- Nunca repita uma pergunta nem peça de novo algo que o cliente já disse. Nunca pergunte de forma aberta "o que você gostaria?".
+- Comece com uma frase curta que mostre que entendeu a resposta anterior e, em seguida, faça a pergunta.
+- A etapa a perguntar é informada na última instrução do sistema. Pergunte somente sobre ela.
 
 FLUXO DE LEVANTAMENTO:
-Siga esta ordem, uma etapa por turno:
+São no máximo 6 etapas, nesta ordem, pulando o que o cliente já respondeu:
 1. Confirmar o tipo de projeto e objetivo principal.
 2. Identificar quem vai usar o sistema, incluindo usuários finais e administrativos.
 3. Entender o processo atual, ou seja, como funciona hoje sem o sistema.
@@ -621,6 +625,14 @@ REGRA DE PROPOSTA:
 - Antes de gerar a proposta, separe duas coisas: DOMÍNIO do cliente e TIPO DE SOLUÇÃO. Exemplo: escritório de direito é domínio jurídico; a solução pode ser site institucional, landing page, portal do cliente ou sistema interno. Celebridade é domínio de marca pessoal; a solução pode ser landing editorial, portal oficial ou campanha. Nunca transforme domínio em outro domínio.
 - Se o cliente pedir página, landing, site institucional ou presença digital, não gere sistema de gestão, dashboard ou ERP, exceto se ele também pedir controle interno, usuários, cadastros, permissões ou relatórios.
 - Se o cliente pedir sistema de gestão, não gere landing page como solução principal; a landing pode ser módulo complementar apenas se o cliente pedir captação, apresentação pública ou conversão.
+
+DIREÇÃO DO visualConcept.visualPrompt:
+- Descreva a tela principal da solução deste cliente, em português, com 120 a 220 palavras. Ela será entregue a um gerador de imagens.
+- Baseie-se no que o cliente disse: nome do negócio, perfis de usuário, módulos e dados reais do briefing.
+- Liste o menu com os módulos reais, de 3 a 4 indicadores com rótulo e valor fictício plausível, o gráfico principal e o que ele compara, a tabela ou lista principal com colunas e 3 linhas de exemplo, e a ação principal.
+- Todo texto da tela deve estar em português do Brasil. Defina uma paleta coerente com o segmento, com códigos hexadecimais.
+- Para site ou landing page, descreva as seções reais, a mensagem do hero e a ação principal, em vez de painéis.
+- Não inclua preço, prazo, score, marca EpicByte, nem pedidos genéricos como "moderno e bonito". Seja concreto.
 
 FORMATO DE RESPOSTA:
 Retorne somente JSON válido no schema solicitado.
@@ -2038,7 +2050,7 @@ const buildBriefingState = (messages: ChatMessage[]): BriefingState => {
   const ctaTerms = ['conhecer a história', 'conhecer a historia', 'ver vídeos', 'ver videos', 'explorar vídeos', 'explorar videos', 'seguir canais oficiais', 'consumir conteúdo', 'consumir conteudo', 'divulgação', 'divulgacao', 'informações', 'informacoes'];
   const priorityTerms = ['impacto visual', 'narrativa completa', 'posicionamento de marca', 'canais oficiais', 'tudo equilibrado', 'entregar rápido', 'entregar rapido', 'reduzir trabalho manual', 'atender clientes melhor', 'organizar dados', 'gerar relatórios', 'gerar relatorios', 'integrar ferramentas'];
   const referenceTerms = ['sem referência definida', 'sem referencia definida', 'não sei', 'nao sei', 'cinematográfico', 'cinematografico', 'campanha esportiva', 'campanha visual', 'editorial', 'luxuoso', 'luxo', 'minimalista', 'tecnológico', 'tecnologico', 'filme', 'site parecido', 'referência', 'referencia'];
-  const stopTerms = ['chega de levantamentos', 'pare de me perguntar', 'não pergunte mais', 'nao pergunte mais', 'me passe o levantamento', 'passe o levantamento', 'crie com as informações que você tem', 'crie com as informacoes que voce tem', 'já respondi', 'ja respondi', 'pode gerar', 'continue', 'finaliza', 'finalize', 'gera a proposta', 'gere a proposta', 'não sei', 'nao sei', 'sem referência definida', 'sem referencia definida'];
+  const stopTerms = ['chega de levantamentos', 'pare de me perguntar', 'não pergunte mais', 'nao pergunte mais', 'me passe o levantamento', 'passe o levantamento', 'crie com as informações que você tem', 'crie com as informacoes que voce tem', 'já respondi', 'ja respondi', 'pode gerar', 'finalize a proposta', 'gera a proposta', 'gere a proposta'];
 
   const subject = context.businessName || context.projectContext.projectName || extractBusinessName(raw);
   const goal = hasAny(text, ['divulgação', 'divulgacao', 'informativa', 'informativo', 'conhecer', 'presença', 'presenca'])
@@ -2222,28 +2234,64 @@ const hasBriefingMaturity = (messages: ChatMessage[]) => {
   );
 };
 
-const getRequirementStep = (messages: ChatMessage[]) => {
-  const text = getUserText(messages).toLowerCase();
-  const userTurns = messages.filter((message) => message.role === 'user').length;
-  const signals = getDiscoverySignals(messages);
-  const state = buildBriefingState(messages);
-  const assistantText = getAssistantText(messages);
-  const lastUserMessage = [...messages].reverse().find((message) => message.role === 'user')?.content.trim().toLowerCase() || '';
-  const priorityWasAsked = assistantText.includes('prioridade da primeira versão') || assistantText.includes('prioridade da primeira versao');
-  const latestAnswerAfterPriority = priorityWasAsked && Boolean(lastUserMessage) && !hasAny(lastUserMessage, ['prioridade da primeira versão', 'prioridade da primeira versao']);
+const TOTAL_REQUIREMENT_STEPS = 6;
+const GENERATE_PROPOSAL_REPLY = 'Já respondi, gere a proposta';
 
-  if (state.wantsToEndDiscovery || state.userSaysAlreadyAnswered) return 7;
-  if (userTurns <= 0) return 1;
-  if (!signals.hasObjective) return 1;
-  if (!signals.hasAudience) return 2;
-  if (!signals.hasCurrentFlow) return 3;
-  if (!signals.hasInputs && !hasAny(text, ['funcionalidade', 'funcionalidades', 'módulo', 'modulo', 'tela', 'cadastro', 'controle'])) return 4;
-  if (!signals.hasIntegrations && !hasAny(text, ['sem integração', 'sem integracao', 'não precisa integrar', 'nao precisa integrar'])) return 5;
-  if (!signals.hasPriority && !latestAnswerAfterPriority && !hasAny(text, ['prazo', 'urgente', 'primeira versão', 'primeira versao', 'mvp'])) return 6;
-  return 7;
+const requirementTopics: Record<number, { label: string; instruction: string }> = {
+  1: { label: 'Objetivo', instruction: 'qual é o tipo de projeto e o objetivo principal' },
+  2: { label: 'Usuários', instruction: 'quem vai usar a solução, incluindo perfis administrativos' },
+  3: { label: 'Processo atual', instruction: 'como o processo funciona hoje, sem o sistema' },
+  4: { label: 'Funcionalidades', instruction: 'qual funcionalidade principal precisa existir na primeira versão' },
+  5: { label: 'Integrações', instruction: 'quais integrações ou restrições precisam ser consideradas' },
+  6: { label: 'Prioridade', instruction: 'qual é o prazo e a prioridade da primeira versão' },
 };
 
-const hasRequirementsMaturity = (messages: ChatMessage[]) => getRequirementStep(messages) >= 7;
+const isRequirementCovered = (step: number, messages: ChatMessage[]) => {
+  const text = getUserText(messages).toLowerCase();
+  const signals = getDiscoverySignals(messages);
+  if (step === 1) return signals.hasObjective;
+  if (step === 2) return signals.hasAudience;
+  if (step === 3) return signals.hasCurrentFlow;
+  if (step === 4) return signals.hasInputs || hasAny(text, ['funcionalidade', 'funcionalidades', 'módulo', 'modulo', 'tela', 'cadastro', 'controle']);
+  if (step === 5) return signals.hasIntegrations || hasAny(text, ['sem integração', 'sem integracao', 'não precisa integrar', 'nao precisa integrar']);
+  return signals.hasPriority || hasAny(text, ['prazo', 'urgente', 'primeira versão', 'primeira versao', 'mvp']);
+};
+
+// Cada etapa é perguntada no máximo uma vez, mesmo que a resposta não contenha as
+// palavras esperadas. Assim o levantamento sempre termina em até 6 perguntas.
+const getRequirementStep = (messages: ChatMessage[]) => {
+  const state = buildBriefingState(messages);
+  if (state.wantsToEndDiscovery || state.userSaysAlreadyAnswered) return TOTAL_REQUIREMENT_STEPS + 1;
+
+  const asked = new Set<number>();
+  let nextStep = 1;
+  messages.forEach((message, index) => {
+    if (message.role !== 'user') return;
+    const prefix = messages.slice(0, index + 1);
+    nextStep = TOTAL_REQUIREMENT_STEPS + 1;
+    for (let step = 1; step <= TOTAL_REQUIREMENT_STEPS; step += 1) {
+      if (!asked.has(step) && !isRequirementCovered(step, prefix)) {
+        nextStep = step;
+        break;
+      }
+    }
+    asked.add(nextStep);
+  });
+  return nextStep;
+};
+
+const hasRequirementsMaturity = (messages: ChatMessage[]) => getRequirementStep(messages) > TOTAL_REQUIREMENT_STEPS;
+
+const getRequirementProgress = (messages: ChatMessage[]) => {
+  const current = Math.min(getRequirementStep(messages), TOTAL_REQUIREMENT_STEPS);
+  return { current, total: TOTAL_REQUIREMENT_STEPS, label: requirementTopics[current].label };
+};
+
+// A partir da terceira etapa, o cliente pode encerrar quando quiser.
+const withGenerateOption = (quickReplies: string[], messages: ChatMessage[]) =>
+  getRequirementStep(messages) >= 3
+    ? [...quickReplies.filter((reply) => reply !== GENERATE_PROPOSAL_REPLY).slice(0, 5), GENERATE_PROPOSAL_REPLY]
+    : quickReplies;
 
 const buildRequirementsDiscoveryQuestion = (messages: ChatMessage[]): DiagnosisResponse | null => {
   if (hasRequirementsMaturity(messages)) return null;
@@ -2265,9 +2313,10 @@ const buildRequirementsDiscoveryQuestion = (messages: ChatMessage[]): DiagnosisR
   const respond = (assistantMessage: string, quickReplies: string[]): DiagnosisResponse => ({
     status: 'collecting',
     assistantMessage,
-    quickReplies,
+    quickReplies: withGenerateOption(quickReplies, messages),
     collected,
     proposal: null,
+    progress: getRequirementProgress(messages),
   });
 
   if (step === 1) {
@@ -3078,6 +3127,7 @@ export default async function handler(req: any, res: any) {
   }
 
   const briefingIsMature = hasRequirementsMaturity(messages);
+  const currentProgress = getRequirementProgress(messages);
   const conversationHistory = messages.map((message) => ({
     role: message.role,
     content: message.content,
@@ -3098,12 +3148,12 @@ export default async function handler(req: any, res: any) {
           {
             role: 'user',
             content: briefingIsMature
-              ? 'As 6 etapas do levantamento já têm informação suficiente. Gere status "proposal" agora e não faça nova pergunta.'
-              : 'Continue o levantamento seguindo exatamente a próxima etapa pendente. Faça uma única pergunta objetiva.',
+              ? 'O levantamento terminou. Gere status "proposal" agora e não faça nova pergunta.'
+              : `Instrução do sistema, não é fala do cliente: esta é a pergunta ${currentProgress.current} de no máximo ${currentProgress.total}. Pergunte somente ${requirementTopics[currentProgress.current].instruction}. Os quickReplies devem responder a essa pergunta.`,
           },
         ],
         temperature: 0.2,
-        max_output_tokens: 3600,
+        max_output_tokens: 7000,
         text: {
           format: {
             type: 'json_schema',
@@ -3161,6 +3211,13 @@ export default async function handler(req: any, res: any) {
           },
           visualConcept: {
             ...payload.proposal.visualConcept,
+            visualPrompt: [
+              payload.proposal.visualConcept.visualPrompt,
+              `Tipo de tela: ${payload.proposal.mockup.screenType}.`,
+              `Módulos reais: ${payload.proposal.mockup.modules.slice(0, 6).join(', ')}.`,
+              `Dados em destaque: ${payload.proposal.mockup.dataHighlights.slice(0, 6).join(', ')}.`,
+              `Ação principal: ${payload.proposal.mockup.primaryAction}.`,
+            ].join('\n'),
             palette: payload.proposal.visualConcept.palette.slice(0, 5),
             imageDataUrl: null,
           },
@@ -3178,9 +3235,10 @@ export default async function handler(req: any, res: any) {
     return json(res, 200, {
       status: payload.status,
       assistantMessage: payload.assistantMessage,
-      quickReplies: payload.quickReplies.slice(0, 8),
+      quickReplies: payload.status === 'collecting' ? withGenerateOption(payload.quickReplies.slice(0, 6), messages) : [],
       collected: payload.collected,
       proposal,
+      ...(payload.status === 'collecting' ? { progress: currentProgress } : {}),
     });
   } catch (error) {
     return json(res, 200, buildFallbackResponse(messages));

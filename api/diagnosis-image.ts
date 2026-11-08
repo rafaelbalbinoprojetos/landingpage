@@ -1,5 +1,5 @@
 export const config = {
-  maxDuration: 60,
+  maxDuration: 180,
 };
 
 const json = (res: any, status: number, body: Record<string, unknown>) => {
@@ -188,9 +188,28 @@ const enhanceVisualPrompt = (prompt: string) => {
   ].join('\n');
 };
 
+const isApplicationPrompt = (prompt: string) =>
+  /dashboard|painel|sistema|gest[aã]o|indicador|m[oó]dulos? reais|tabela|erp|crm|workflow/i.test(prompt) &&
+  !/landing page|site institucional/i.test(prompt);
+
+const applicationArtDirection = [
+  'Crie a captura de tela de um sistema web real, em produção, projetado por um estúdio sênior de produto. Referência de acabamento: Linear, Stripe Dashboard e Vercel, sem copiar suas marcas.',
+  'Composição desktop: menu lateral com os módulos reais, barra superior com busca, filtros e usuário, linha de indicadores, gráfico principal grande, painel secundário e tabela com dados.',
+  'Acabamento: grade rigorosa, alinhamento perfeito, espaçamento consistente, hierarquia tipográfica clara, sans-serif de interface, bordas finas, poucas cores de destaque e chips de status.',
+  'Os dados devem ser plausíveis e coerentes entre si: totais, gráficos e linhas da tabela contam a mesma história. Sem lorem ipsum nem blocos cinza no lugar de texto.',
+  'Todo texto deve estar em português do Brasil, com ortografia correta, nítido e legível.',
+].join('\n');
+
+const siteArtDirection = [
+  'Crie a captura de tela de um site real, projetado por um estúdio sênior, com direção de arte específica deste segmento.',
+  'Composição: navegação, hero com mensagem forte e seções abaixo, com hierarquia editorial, tipografia sofisticada, imagens coerentes e respiro generoso.',
+  'Todo texto deve estar em português do Brasil, com ortografia correta, nítido e legível. Sem lorem ipsum.',
+].join('\n');
+
 const buildDirectImagePrompt = (prompt: string) => [
-  prompt.trim(),
-  'IMPORTANTE: gere somente a interface final como screenshot full-page real. A página/site/sistema deve preencher 100% da imagem, de borda a borda. Não coloque fundo externo, canvas cinza, página centralizada, margem ao redor, sombra de apresentação, monitor, notebook, celular, tablet, moldura, mockup, apresentação, mesa ou ambiente físico.',
+  isApplicationPrompt(prompt) ? applicationArtDirection : siteArtDirection,
+  `BRIEFING DESTA TELA:\n${prompt.trim()}`,
+  'IMPORTANTE: gere somente a interface, preenchendo 100% da imagem de borda a borda. Não mostre monitor, notebook, celular, moldura, mesa, sombra de apresentação nem fundo externo. Não inclua logotipos de terceiros.',
 ].join('\n\n');
 
 const getNanoBananaModels = () => {
@@ -350,11 +369,12 @@ const generateImageWithNanoBanana = async (apiKey: string, prompt: string) => {
   throw lastError instanceof Error ? lastError : new Error('Nano Banana image generation failed.');
 };
 
-// Limite abaixo do maxDuration de 60 s, para sobrar tempo ao Gemini como reserva.
-const OPENAI_IMAGE_TIMEOUT_MS = 40_000;
+// Limite abaixo do maxDuration, para sobrar tempo ao Gemini como reserva.
+const OPENAI_IMAGE_TIMEOUT_MS = 120_000;
 
 const generateImageWithOpenAI = async (apiKey: string, prompt: string) => {
-  const model = String(process.env.OPENAI_IMAGE_MODEL || '').trim() || 'gpt-image-2.5-flare';
+  const model = String(process.env.OPENAI_IMAGE_MODEL || '').trim() || 'gpt-image-2.5-sunburst';
+  const quality = String(process.env.OPENAI_IMAGE_QUALITY || '').trim() || 'high';
   const size = '1536x1024';
   const response = await fetch('https://api.openai.com/v1/images/generations', {
     method: 'POST',
@@ -362,7 +382,7 @@ const generateImageWithOpenAI = async (apiKey: string, prompt: string) => {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
     },
-    body: JSON.stringify({ model, prompt, size, quality: 'medium', n: 1 }),
+    body: JSON.stringify({ model, prompt, size, quality, n: 1 }),
     signal: AbortSignal.timeout(OPENAI_IMAGE_TIMEOUT_MS),
   });
 

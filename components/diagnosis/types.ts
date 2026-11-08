@@ -111,4 +111,5 @@ export type DiagnosisApiResponse = {
   assistantMessage: string;
   quickReplies: string[];
   proposal: DiagnosisProposal | null;
+  progress?: { current: number; total: number; label: string };
 };
