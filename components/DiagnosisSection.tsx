@@ -1,203 +1,30 @@
-import React, { useState } from 'react';
-import { ArrowRight, BrainCircuit, Sparkles } from 'lucide-react';
+import React from 'react';
+import ConsultationChat from './diagnosis/ConsultationChat';
 import Reveal from './Reveal';
-import SectionIntro from './SectionIntro';
 
-const defaultInput =
-  'Descreva sua operação, problemas ou processos manuais...';
-
-type DiagnosisResult = {
-  initialDiagnosis: string;
-  epicByteApproach: string;
-  developmentPlan: string[];
-  recommendedTechnologies: string[];
-  expectedFeatures: string[];
-  timeEstimate: string;
-  investmentEstimate: string;
-  evolutionOpportunities: string[];
-  nextStep: string;
-};
-
-const DiagnosisSection: React.FC = () => {
-  const [input, setInput] = useState('');
-  const [result, setResult] = useState<DiagnosisResult | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const handleSubmit = async () => {
-    const trimmedInput = input.trim();
-    if (!trimmedInput) return;
-
-    setIsLoading(true);
-    setError('');
-
-    try {
-      const response = await fetch('/api/diagnosis', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ input: trimmedInput }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data?.error || 'Nao foi possivel gerar o diagnostico.');
-      }
-
-      setResult(data);
-    } catch (submitError) {
-      const message =
-        submitError instanceof Error
-          ? submitError.message
-          : 'Nao foi possivel gerar o diagnostico agora.';
-      setResult(null);
-      setError(message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  return (
-    <section id="diagnostico-ia" className="py-20 md:py-28 bg-white/[0.02] scroll-mt-24">
-      <div className="max-w-screen-2xl mx-auto px-4 sm:px-8 xl:px-12">
-        <Reveal className="mb-12">
-          <SectionIntro
-            eyebrow="Diagnóstico assistido"
-            title="Diagnóstico estratégico com IA"
-            description="Descreva a solicitação do cliente e receba uma leitura consultiva com arquitetura proposta, stack recomendada, prazo estimado e faixa de investimento."
-            titleClassName="max-w-4xl mb-6"
-            descriptionClassName="max-w-4xl"
-          />
-        </Reveal>
-
-        <div className="grid gap-6 xl:grid-cols-12">
-          <Reveal className="xl:col-span-5" delayMs={40}>
-            <div className="glass rounded-[2rem] border-white/10 p-6 md:p-7 h-full">
-              <div className="mb-5 flex items-center gap-3 text-cyan-200">
-                <BrainCircuit size={20} />
-                <p className="text-xs uppercase tracking-[0.16em]">Leitura inicial da operação</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                <textarea
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  rows={7}
-                  placeholder="Descreva a solicitacao do cliente, o contexto do negocio e o que precisa ser construido..."
-                  className="w-full resize-none bg-transparent text-sm leading-relaxed text-slate-100 placeholder:text-slate-500 focus:outline-none"
-                />
-              </div>
-              <button
-                onClick={handleSubmit}
-                disabled={isLoading || !input.trim()}
-                className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-300 px-5 py-3.5 text-sm font-semibold uppercase tracking-[0.14em] text-slate-950 transition-colors hover:bg-cyan-200 disabled:cursor-not-allowed disabled:bg-cyan-300/50"
-              >
-                {isLoading ? 'Gerando diagnóstico' : 'Gerar diagnóstico'}
-                <ArrowRight size={16} />
-              </button>
-              {error ? (
-                <p className="mt-4 text-sm leading-relaxed text-rose-300">
-                  {error}
-                </p>
-              ) : null}
-            </div>
-          </Reveal>
-
-          <Reveal className="xl:col-span-7" delayMs={110}>
-            <div className="glass rounded-[2rem] border-white/10 p-6 md:p-7 h-full">
-              <div className="mb-5 flex items-center gap-3 text-cyan-200">
-                <Sparkles size={18} />
-                <p className="text-xs uppercase tracking-[0.16em]">Resposta consultiva estruturada</p>
-              </div>
-
-              {result ? (
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 md:col-span-2">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500 mb-2">Diagnóstico inicial</p>
-                    <p className="text-slate-100 leading-relaxed">{result.initialDiagnosis}</p>
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500 mb-2">Abordagem da EpicByte</p>
-                    <p className="text-sm leading-relaxed text-slate-300">{result.epicByteApproach}</p>
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500 mb-3">Estimativa de tempo</p>
-                    <p className="text-sm leading-relaxed text-slate-300">{result.timeEstimate}</p>
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 md:col-span-2">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500 mb-3">Como seria desenvolvido</p>
-                    <div className="space-y-3">
-                      {result.developmentPlan.map((item) => (
-                        <p key={item} className="text-sm leading-relaxed text-slate-300">
-                          {item}
-                        </p>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500 mb-3">Tecnologias recomendadas</p>
-                    <div className="space-y-3">
-                      {result.recommendedTechnologies.map((item) => (
-                        <p key={item} className="text-sm leading-relaxed text-slate-300">
-                          {item}
-                        </p>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500 mb-3">Funcionalidades esperadas</p>
-                    <div className="space-y-3">
-                      {result.expectedFeatures.map((item) => (
-                        <p key={item} className="text-sm leading-relaxed text-slate-100">
-                          {item}
-                        </p>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-4 md:col-span-2">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-cyan-100 mb-3">Estimativa de investimento</p>
-                    <p className="text-sm leading-relaxed text-slate-100">{result.investmentEstimate}</p>
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 md:col-span-2">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500 mb-3">Oportunidades de evolução</p>
-                    <div className="space-y-3">
-                      {result.evolutionOpportunities.map((item) => (
-                        <p key={item} className="text-sm leading-relaxed text-slate-300">
-                          {item}
-                        </p>
-                      ))}
-                    </div>
-                    <div className="mt-5 flex flex-col gap-3 border-t border-white/10 pt-4 sm:flex-row sm:items-center sm:justify-between">
-                      <p className="text-sm text-slate-300">
-                        {result.nextStep}
-                      </p>
-                      <button
-                        onClick={() => {
-                          window.location.href = 'mailto:contato@epicbyte.tech?subject=Diagnostico%20estrategico%20EpicByte';
-                        }}
-                        className="rounded-xl bg-cyan-300 px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-950 transition-colors hover:bg-cyan-200"
-                      >
-                        Agendar reunião estratégica
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex h-full min-h-[22rem] items-center justify-center rounded-[1.5rem] border border-dashed border-white/10 bg-white/[0.02] p-6 text-center">
-                  <div className="max-w-md">
-                    <p className="font-display text-2xl text-white">Descreva a solicitação para iniciar a análise.</p>
-                    <p className="mt-3 text-sm leading-relaxed text-slate-400">
-                      A resposta organiza a demanda em arquitetura, desenvolvimento, stack, prazo, investimento e próximos passos.
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </Reveal>
+const DiagnosisSection: React.FC = () => (
+  <section id="briefing" className="eb-section relative scroll-mt-16 overflow-hidden bg-night text-snow">
+    <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-mist-2/10 to-transparent" />
+    <div className="pointer-events-none absolute left-1/2 top-24 h-[34rem] w-[60rem] max-w-full -translate-x-1/2 bg-[radial-gradient(closest-side,rgba(139,92,246,0.18),transparent)]" />
+    <div className="shell relative">
+      <Reveal className="mb-12 grid gap-6 lg:grid-cols-12">
+        <div className="lg:col-span-7">
+          <p className="eb-kicker mb-4 text-ion">Briefing com IA</p>
+          <h2 className="eb-title">
+            Conte o que <span className="eb-grad">precisa resolver.</span>
+          </h2>
         </div>
-      </div>
-    </section>
-  );
-};
+        <p className="max-w-lg text-lg leading-relaxed text-fog lg:col-span-4 lg:col-start-9 lg:self-end">
+          Uma IA conduz o levantamento por texto ou áudio. Em cerca de 7 minutos, você recebe uma proposta inicial para
+          baixar ou nos enviar.
+        </p>
+      </Reveal>
+
+      <Reveal delayMs={80}>
+        <ConsultationChat />
+      </Reveal>
+    </div>
+  </section>
+);
 
 export default DiagnosisSection;

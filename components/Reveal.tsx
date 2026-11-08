@@ -15,15 +15,13 @@ const Reveal: React.FC<RevealProps> = ({ children, className = '', delayMs = 0 }
     if (!node) return;
 
     const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            setIsVisible(true);
-            observer.unobserve(entry.target);
-          }
-        });
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
       },
-      { threshold: 0.16, rootMargin: '0px 0px -8% 0px' }
+      { threshold: 0.08 }
     );
 
     observer.observe(node);
@@ -33,8 +31,8 @@ const Reveal: React.FC<RevealProps> = ({ children, className = '', delayMs = 0 }
   return (
     <div
       ref={revealRef}
-      className={`${className} transition-all duration-700 ease-out will-change-transform ${
-        isVisible ? 'opacity-100 translate-y-0 blur-0' : 'opacity-0 translate-y-5 blur-[2px]'
+      className={`${className} transition-[opacity,transform] duration-500 ease-out ${
+        isVisible ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0'
       }`}
       style={{ transitionDelay: `${delayMs}ms` }}
     >
