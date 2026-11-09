@@ -1,3 +1,5 @@
+import { LIMIT_MESSAGE, checkAiBudget } from './_diagnosis/security.js';
+
 export const config = {
   maxDuration: 30,
 };
@@ -29,6 +31,8 @@ export default async function handler(req: any, res: any) {
     res.setHeader('Allow', 'POST');
     return json(res, 405, { error: 'Method not allowed.' });
   }
+
+  if (!(await checkAiBudget(req, 'voice'))) return json(res, 429, { error: LIMIT_MESSAGE });
 
   const apiKey = process.env.ELEVENLABS_API_KEY;
   const voiceId = process.env.ELEVENLABS_VOICE_ID;

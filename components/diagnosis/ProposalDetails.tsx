@@ -34,10 +34,20 @@ const requirementGroups: Array<{ status: ProposalRequirement['status']; label: s
 const ProposalDetails: React.FC<{ proposal: DiagnosisProposal }> = ({ proposal }) => {
   const { executiveSummary, architecture, estimationModules, pricing, requirementsModel } = proposal;
   // Propostas do modo de reserva não têm esses dados, e o bloco fica oculto.
-  if (!estimationModules?.length && !requirementsModel?.requirements?.length) return null;
+  if (!estimationModules?.length && !requirementsModel?.requirements?.length && !proposal.reviewRequired) return null;
 
   return (
     <div className="space-y-5">
+      {proposal.reviewRequired ? (
+        <div role="note" className="rounded-lg border border-amber-300/30 bg-amber-300/10 p-5 text-sm leading-relaxed text-amber-100">
+          Esta proposta precisa da revisão da equipe EpicByte antes da confirmação de valores e prazos.
+        </div>
+      ) : null}
+      {proposal.businessProblem ? (
+        <Block title="Problema de negócio">
+          <p className="text-sm leading-relaxed text-slate-200">{proposal.businessProblem}</p>
+        </Block>
+      ) : null}
       {executiveSummary ? (
         <Block title="Resumo executivo">
           <p className="text-sm leading-relaxed text-slate-200 md:text-base">{executiveSummary}</p>
@@ -71,7 +81,11 @@ const ProposalDetails: React.FC<{ proposal: DiagnosisProposal }> = ({ proposal }
         </Block>
       ) : null}
 
+      {proposal.nonFunctionalRequirements?.length ? <Block title="Requisitos não funcionais"><TextList items={proposal.nonFunctionalRequirements} /></Block> : null}
+      {proposal.integrations?.length ? <Block title="Integrações"><TextList items={proposal.integrations} /></Block> : null}
       {proposal.benefits?.length ? <Block title="Benefícios"><TextList items={proposal.benefits} /></Block> : null}
+      {proposal.commercialRationale ? <Block title="O que pesa no investimento"><p className="text-sm leading-relaxed text-slate-300">{proposal.commercialRationale}</p></Block> : null}
+      {proposal.pendingItems?.length ? <Block title="Pendências a validar"><TextList items={proposal.pendingItems} /></Block> : null}
 
       {pricing ? (
         <Block title="Composição do investimento">
@@ -79,7 +93,7 @@ const ProposalDetails: React.FC<{ proposal: DiagnosisProposal }> = ({ proposal }
             {pricing.phases.map((phase) => (
               <div key={phase.name} className="rounded-md bg-white/[0.035] p-4 text-sm text-slate-300">
                 <p className="font-semibold text-white">{phase.name}</p>
-                <p className="mt-1">{money(phase.investmentMin)} a {money(phase.investmentMax)}</p>
+                <p className="mt-1">{phase.investmentMin !== null && phase.investmentMax !== null ? `${money(phase.investmentMin)} a ${money(phase.investmentMax)}` : 'Investimento em revisão'}</p>
                 <p>{phase.weeksMin} a {phase.weeksMax} semanas</p>
               </div>
             ))}

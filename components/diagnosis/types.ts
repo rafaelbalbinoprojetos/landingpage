@@ -104,7 +104,13 @@ export type DiagnosisProposal = {
   successIndicators?: string[];
   executiveSummary?: string;
   roiNarrative?: string;
-  imageBrief?: unknown;
+  imageGrant?: string | null;
+  reviewRequired?: boolean;
+  businessProblem?: string;
+  commercialRationale?: string;
+  nonFunctionalRequirements?: string[];
+  integrations?: string[];
+  pendingItems?: string[];
   architecture?: string;
   benefits?: string[];
   assumptions?: string[];
@@ -115,11 +121,11 @@ export type DiagnosisProposal = {
     description: string;
     phase: 'mvp' | 'profissional' | 'evolucao';
     complexity: 'baixa' | 'media' | 'alta';
-    integrations: number;
   }>;
   pricing?: {
-    source: 'estimativa_ia';
-    phases: Array<{ name: string; modules: string[]; investmentMin: number; investmentMax: number; weeksMin: number; weeksMax: number }>;
+    source: 'motor_comercial';
+    priced: boolean;
+    phases: Array<{ name: string; modules: string[]; investmentMin: number | null; investmentMax: number | null; weeksMin: number; weeksMax: number }>;
     maintenanceMonthlyMin: number;
     maintenanceMonthlyMax: number;
     infrastructureNote: string;
@@ -147,5 +153,5 @@ export type DiagnosisApiResponse = {
   quickReplies: string[];
   proposal: DiagnosisProposal | null;
   progress?: { current: number; total: number; label: string };
-  briefingState?: unknown;
+  briefingToken?: string;
 };

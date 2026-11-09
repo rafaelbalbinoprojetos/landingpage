@@ -9,12 +9,14 @@ export const PROJECT_CATEGORIES = [
   'ecommerce',
   'landing_page',
   'integracao_corporativa',
+  'saas',
+  'saude',
   'outro',
 ] as const;
 export type ProjectCategory = (typeof PROJECT_CATEGORIES)[number];
 
 export const DIMENSIONS = [
-  'contexto', 'objetivos', 'usuarios', 'processos', 'entradas', 'saidas', 'regras', 'integracoes',
+  'contexto', 'objetivos', 'usuarios', 'processos', 'funcionalidades', 'restricoes', 'entradas', 'saidas', 'regras', 'integracoes',
   'permissoes', 'seguranca', 'volumes', 'prioridades', 'prazo', 'orcamento', 'publico', 'conteudo', 'conversao', 'identidade',
 ] as const;
 export type Dimension = (typeof DIMENSIONS)[number];
@@ -45,7 +47,15 @@ export type Requirement = {
 
 export type Conflict = { description: string; blocking: boolean };
 
+export const FINDING_TYPES = ['prazo_incompativel', 'integracao_indefinida', 'dependencia_terceiros', 'dados_sensiveis', 'regra_ausente', 'complexidade_desproporcional'] as const;
+export type Finding = { type: (typeof FINDING_TYPES)[number]; explanation: string; basis: 'fato' | 'hipotese' };
+
 export type BriefingEngineState = {
+  sessionId: string;
+  initialDescription: string;
+  transcript: Array<{ role: 'user' | 'assistant'; content: string }>;
+  decisions: string[];
+  findings: Finding[];
   category: ProjectCategory | null;
   dimensions: Partial<Record<Dimension, { status: DimensionStatus; summary: string }>>;
   asked: Partial<Record<Dimension, number>>;
@@ -60,6 +70,9 @@ export type InterviewOutput = {
   quickReplies: string[];
   category: ProjectCategory;
   targetDimension: Dimension | 'conflito';
+  endIntent?: boolean;
+  findings?: Finding[];
+  decisions?: string[];
   dimensionUpdates: Array<{ dimension: Dimension; status: DimensionStatus; summary: string }>;
   requirements: Array<Pick<Requirement, 'kind' | 'description' | 'priority' | 'origin'> & { dependsOn: string[] }>;
   conflicts: Conflict[];
@@ -76,6 +89,8 @@ export const dimensionGuide: Record<Dimension, { label: string; question: string
   objetivos: { label: 'Objetivos', question: 'Que resultado mostraria que o projeto deu certo?', replies: ['Reduzir retrabalho', 'Ganhar controle', 'Aumentar capacidade', 'Reduzir custos'] },
   usuarios: { label: 'Usuários', question: 'Quais perfis de pessoas vão usar a solução?', replies: ['Equipe interna', 'Gestores', 'Clientes', 'Administradores'] },
   processos: { label: 'Processo atual', question: 'Como esse processo acontece hoje, do início ao fim?', replies: ['Planilhas', 'WhatsApp e e-mail', 'Papel', 'Outro sistema'] },
+  funcionalidades: { label: 'Funcionalidades', question: 'Quais funcionalidades não podem faltar?', replies: ['Cadastros', 'Fluxo de aprovação', 'Painel de indicadores', 'Relatórios'] },
+  restricoes: { label: 'Restrições', question: 'Existe alguma restrição técnica, legal ou operacional a respeitar?', replies: ['Exigência legal', 'Tecnologia já definida', 'Uso sem internet', 'Nenhuma conhecida'] },
   entradas: { label: 'Entradas', question: 'Quais informações principais precisam entrar na solução?', replies: ['Cadastros', 'Arquivos', 'Dados de outro sistema', 'Formulários'] },
   saidas: { label: 'Saídas', question: 'O que a solução precisa entregar no final?', replies: ['Relatórios', 'Painel de indicadores', 'Documentos', 'Notificações'] },
   regras: { label: 'Regras', question: 'Quais regras ou aprovações não podem falhar nesse processo?', replies: ['Aprovações por alçada', 'Prazos obrigatórios', 'Cálculos específicos', 'Ainda não definidas'] },
@@ -93,9 +108,46 @@ export const dimensionGuide: Record<Dimension, { label: string; question: string
 };
 
 const system = {
-  critical: ['contexto', 'usuarios', 'processos', 'regras', 'integracoes', 'prioridades'],
-  important: ['objetivos', 'entradas', 'saidas', 'permissoes', 'seguranca', 'volumes', 'prazo', 'orcamento'],
+  critical: ['contexto', 'usuarios', 'processos', 'funcionalidades', 'regras', 'integracoes', 'prioridades'],
+  important: ['objetivos', 'entradas', 'saidas', 'permissoes', 'seguranca', 'restricoes', 'volumes', 'prazo', 'orcamento'],
 } as const;
+
+// Perguntas próprias de cada categoria, usadas quando a pergunta da IA não serve.
+export const categoryQuestions: Partial<Record<ProjectCategory, Partial<Record<Dimension, string>>>> = {
+  saude: {
+    usuarios: 'Quem atende e quem administra: recepção, profissionais de saúde, financeiro?',
+    regras: 'Quais regras de atendimento e prontuário precisam ser seguidas?',
+    seguranca: 'Quais dados de pacientes serão guardados e quem pode acessá-los?',
+  },
+  saas: {
+    usuarios: 'Quem é o cliente pagante e quem usa a plataforma no dia a dia?',
+    regras: 'Como funcionarão os planos, limites e cobrança?',
+    volumes: 'Quantas empresas clientes você espera no primeiro ano?',
+  },
+  aplicativo: {
+    entradas: 'O aplicativo precisa de câmera, localização, notificações ou uso sem internet?',
+    funcionalidades: 'Qual é a tarefa principal que a pessoa fará no aplicativo?',
+  },
+  ecommerce: {
+    entradas: 'Quantos produtos serão vendidos e como é o controle de estoque?',
+    integracoes: 'Quais meios de pagamento e frete você precisa?',
+  },
+  automacao: {
+    processos: 'Qual tarefa repetitiva você quer automatizar e como ela acontece hoje?',
+    regras: 'Em quais casos a automação deve parar e chamar uma pessoa?',
+  },
+  ia: {
+    entradas: 'Quais dados ou documentos a inteligência artificial usará?',
+    regras: 'O que acontece quando a resposta da IA estiver errada, e quem revisa?',
+  },
+  integracao_corporativa: {
+    integracoes: 'Quais sistemas precisam conversar, e você já tem acesso às APIs ou arquivos deles?',
+    regras: 'Em caso de divergência entre os sistemas, qual prevalece?',
+  },
+  landing_page: {
+    objetivos: 'Qual resultado principal essa página deve gerar?',
+  },
+};
 
 export const requiredDimensions: Record<ProjectCategory, { critical: readonly Dimension[]; important: readonly Dimension[] }> = {
   sistema_web: system,
@@ -123,13 +175,26 @@ export const requiredDimensions: Record<ProjectCategory, { critical: readonly Di
     critical: ['contexto', 'processos', 'integracoes', 'entradas', 'saidas', 'regras', 'seguranca'],
     important: ['usuarios', 'permissoes', 'volumes', 'prioridades', 'prazo', 'orcamento'],
   },
+  saas: {
+    critical: ['contexto', 'usuarios', 'funcionalidades', 'regras', 'prioridades'],
+    important: ['integracoes', 'permissoes', 'seguranca', 'volumes', 'restricoes', 'prazo', 'orcamento'],
+  },
+  saude: {
+    critical: ['contexto', 'usuarios', 'processos', 'funcionalidades', 'regras', 'seguranca', 'permissoes'],
+    important: ['integracoes', 'volumes', 'restricoes', 'prioridades', 'prazo', 'orcamento'],
+  },
   outro: {
     critical: ['contexto', 'objetivos', 'usuarios', 'prioridades'],
     important: ['processos', 'integracoes', 'prazo', 'orcamento'],
   },
 };
 
-export const createEmptyState = (): BriefingEngineState => ({
+export const createEmptyState = (sessionId = 'sessao'): BriefingEngineState => ({
+  sessionId,
+  initialDescription: '',
+  transcript: [],
+  decisions: [],
+  findings: [],
   category: null,
   dimensions: {},
   asked: {},
@@ -142,59 +207,43 @@ export const createEmptyState = (): BriefingEngineState => ({
 const clampText = (value: unknown, max: number) => (typeof value === 'string' ? value.trim().slice(0, max) : '');
 const oneOf = <T extends string>(options: readonly T[], value: unknown): T | null =>
   options.includes(value as T) ? (value as T) : null;
-const clampCount = (value: unknown) => {
-  const count = Number(value);
-  return Number.isFinite(count) ? Math.min(100, Math.max(0, Math.floor(count))) : 0;
-};
-
 const statusFromOrigin = (origin: RequirementOrigin): RequirementStatus =>
   origin === 'cliente' ? 'confirmado' : origin === 'recomendacao_epicbyte' ? 'recomendacao' : 'hipotese_pendente';
 
-// O estado volta do navegador, então tudo é revalidado antes de ser usado.
-export const sanitizeState = (raw: unknown): BriefingEngineState => {
-  const state = createEmptyState();
-  if (!raw || typeof raw !== 'object') return state;
-  const input = raw as Record<string, any>;
+const normalize = (text: string) => text.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
 
-  state.category = oneOf(PROJECT_CATEGORIES, input.category);
-  state.questionCount = clampCount(input.questionCount);
-  state.conflictQuestions = clampCount(input.conflictQuestions);
-
-  for (const dimension of DIMENSIONS) {
-    const entry = input.dimensions?.[dimension];
-    const status = oneOf(DIMENSION_STATUSES, entry?.status);
-    if (status) state.dimensions[dimension] = { status, summary: clampText(entry.summary, 400) };
-    const asked = clampCount(input.asked?.[dimension]);
-    if (asked) state.asked[dimension] = asked;
-  }
-
-  if (Array.isArray(input.conflicts)) {
-    state.conflicts = input.conflicts.slice(0, 8)
-      .map((item: any) => ({ description: clampText(item?.description, 300), blocking: item?.blocking === true }))
-      .filter((item: Conflict) => item.description);
-  }
-
-  if (Array.isArray(input.requirements)) {
-    state.requirements = input.requirements.slice(0, 80).flatMap((item: any): Requirement[] => {
-      const description = clampText(item?.description, 500);
+// A resposta da IA também é validada: itens fora do formato são descartados.
+export const parseInterviewOutput = (raw: any): InterviewOutput | null => {
+  if (!raw || typeof raw.assistantMessage !== 'string' || !Array.isArray(raw.quickReplies) || !Array.isArray(raw.dimensionUpdates) || !Array.isArray(raw.requirements) || !Array.isArray(raw.conflicts)) return null;
+  const category = oneOf(PROJECT_CATEGORIES, raw.category);
+  if (!category) return null;
+  return {
+    assistantMessage: clampText(raw.assistantMessage, 900),
+    quickReplies: raw.quickReplies.map((item: unknown) => clampText(item, 60)).filter(Boolean).slice(0, 6),
+    category,
+    targetDimension: oneOf([...DIMENSIONS, 'conflito'] as const, raw.targetDimension) || 'conflito',
+    endIntent: raw.endIntent === true,
+    dimensionUpdates: raw.dimensionUpdates.flatMap((item: any) => {
+      const dimension = oneOf(DIMENSIONS, item?.dimension);
+      const status = oneOf(DIMENSION_STATUSES, item?.status);
+      return dimension && status ? [{ dimension, status, summary: clampText(item.summary, 400) }] : [];
+    }),
+    requirements: raw.requirements.slice(0, 20).flatMap((item: any) => {
       const kind = oneOf(REQUIREMENT_KINDS, item?.kind);
       const origin = oneOf(REQUIREMENT_ORIGINS, item?.origin);
-      if (!description || !kind || !origin) return [];
-      return [{
-        id: clampText(item.id, 12) || '',
-        kind,
-        description,
-        origin,
-        priority: oneOf(['alta', 'media', 'baixa'] as const, item.priority) || 'media',
-        status: statusFromOrigin(origin),
-        dependencies: Array.isArray(item.dependencies) ? item.dependencies.map((dep: unknown) => clampText(dep, 12)).filter(Boolean).slice(0, 8) : [],
-      }];
-    });
-  }
-  return state;
+      const description = clampText(item?.description, 500);
+      if (!kind || !origin || !description) return [];
+      return [{ kind, origin, description, priority: oneOf(['alta', 'media', 'baixa'] as const, item.priority) || 'media' as const, dependsOn: Array.isArray(item.dependsOn) ? item.dependsOn.map((dep: unknown) => clampText(dep, 500)).filter(Boolean) : [] }];
+    }),
+    conflicts: raw.conflicts.slice(0, 8).map((item: any) => ({ description: clampText(item?.description, 300), blocking: item?.blocking === true })).filter((item: Conflict) => item.description),
+    findings: (Array.isArray(raw.findings) ? raw.findings : []).slice(0, 10).flatMap((item: any) => {
+      const type = oneOf(FINDING_TYPES, item?.type);
+      const explanation = clampText(item?.explanation, 400);
+      return type && explanation ? [{ type, explanation, basis: item.basis === 'fato' ? 'fato' as const : 'hipotese' as const }] : [];
+    }),
+    decisions: (Array.isArray(raw.decisions) ? raw.decisions : []).map((item: unknown) => clampText(item, 300)).filter(Boolean).slice(0, 10),
+  };
 };
-
-const normalize = (text: string) => text.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
 
 export const mergeInterview = (previous: BriefingEngineState, output: InterviewOutput): BriefingEngineState => {
   const state: BriefingEngineState = {
@@ -203,6 +252,8 @@ export const mergeInterview = (previous: BriefingEngineState, output: InterviewO
     requirements: [...previous.requirements],
     category: oneOf(PROJECT_CATEGORIES, output.category) || previous.category,
     conflicts: output.conflicts.filter((item) => item.description?.trim()).slice(0, 8),
+    decisions: [...new Set([...previous.decisions, ...(output.decisions || [])])].slice(-30),
+    findings: [...previous.findings, ...(output.findings || []).filter((item) => !previous.findings.some((known) => normalize(known.explanation) === normalize(item.explanation)))].slice(-20),
   };
 
   for (const update of output.dimensionUpdates) {
@@ -305,7 +356,8 @@ export const resolveQuestion = (
     return { message: output.assistantMessage, quickReplies: replies(dimensionGuide[target].replies), target };
   }
   const guide = dimensionGuide[decision.target];
-  return { message: guide.question, quickReplies: guide.replies, target: decision.target };
+  const specific = categoryQuestions[state.category || 'outro']?.[decision.target];
+  return { message: specific || guide.question, quickReplies: guide.replies, target: decision.target };
 };
 
 export const registerQuestion = (state: BriefingEngineState, target: Dimension | 'conflito'): BriefingEngineState => ({
@@ -356,18 +408,25 @@ export const finalizeState = (state: BriefingEngineState): BriefingEngineState =
 };
 
 const MARKETING_TERMS = ['branding', 'campanha', 'conversao', 'landing', 'funil', 'captacao de leads', 'marca pessoal', 'storytelling'];
-const OPERATIONAL_CATEGORIES: ProjectCategory[] = ['sistema_web', 'automacao', 'ia', 'integracao_corporativa'];
+const OPERATIONAL_CATEGORIES: ProjectCategory[] = ['sistema_web', 'automacao', 'ia', 'integracao_corporativa', 'saude', 'saas'];
 
 export const isOperationalCategory = (category: ProjectCategory | null) =>
   Boolean(category && OPERATIONAL_CATEGORIES.includes(category));
 
+const blockedMarketing = (clientText: string) => {
+  const client = normalize(clientText);
+  return MARKETING_TERMS.filter((term) => !client.includes(term));
+};
+
 // Remove linguagem de marketing de projetos operacionais, salvo se o próprio cliente a usou.
 export const removeOffTopicMarketing = (category: ProjectCategory | null, clientText: string, items: string[]) => {
   if (!isOperationalCategory(category)) return items;
-  const client = normalize(clientText);
-  const blocked = MARKETING_TERMS.filter((term) => !client.includes(term));
-  return items.filter((item) => {
-    const text = normalize(item);
-    return !blocked.some((term) => text.includes(term));
-  });
+  const blocked = blockedMarketing(clientText);
+  return items.filter((item) => !blocked.some((term) => normalize(item).includes(term)));
+};
+
+export const removeOffTopicSentences = (category: ProjectCategory | null, clientText: string, text: string) => {
+  if (!isOperationalCategory(category) || !text) return text;
+  const blocked = blockedMarketing(clientText);
+  return text.split(/(?<=[.!?])\s+/).filter((sentence) => !blocked.some((term) => normalize(sentence).includes(term))).join(' ');
 };

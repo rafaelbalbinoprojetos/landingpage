@@ -3,6 +3,7 @@ import { beforeEach, test } from 'node:test';
 import handler from '../api/diagnosis-image';
 import { briefFromMockup, buildImagePrompt, getImageSize, resolveStyle, sanitizeImageBrief } from '../api/_diagnosis/imagePrompt';
 import type { ImageBrief } from '../api/_diagnosis/imagePrompt';
+import { resetRateLimitMemory, signPayload } from '../api/_diagnosis/security';
 
 const sap: ImageBrief = {
   productName: 'Governança de Reservas',
@@ -84,6 +85,7 @@ const clearReviewEnvironment = () => {
 beforeEach(() => {
   calls = [];
   reviews = [];
+  resetRateLimitMemory();
   clearReviewEnvironment();
   process.env.OPENAI_API_KEY = 'teste';
   globalThis.fetch = (async (url: unknown, init: any) => {
@@ -96,6 +98,8 @@ beforeEach(() => {
     return new Response(JSON.stringify({ output_text: JSON.stringify(reviews.shift()) }), { status: 200 });
   }) as typeof fetch;
 });
+
+const grant = (brief: unknown = sap) => signPayload('image', { id: Math.random().toString(36), brief }, 600);
 
 const callApi = async (body: unknown) => {
   let output: any;
@@ -110,7 +114,7 @@ const review = (score: number, corrections = '') => ({
 });
 
 test('padrão: uma única geração, sem avaliação, sem mudar modelo e qualidade', async () => {
-  const result = await callApi({ imageBrief: sap, prompt: 'BRIEFING BRUTO' });
+  const result = await callApi({ imageGrant: grant(), prompt: 'BRIEFING BRUTO' });
   assert.equal(calls.length, 1);
   assert.equal(calls[0].body.model, 'gpt-image-2.5-sunburst');
   assert.equal(calls[0].body.quality, 'high');
@@ -122,7 +126,7 @@ test('padrão: uma única geração, sem avaliação, sem mudar modelo e qualida
 test('avaliação ligada sem regeneração: avalia, mas não gera de novo', async () => {
   process.env.IMAGE_REVIEW_ENABLED = 'true';
   reviews = [review(1, 'Corrigir textos')];
-  await callApi({ imageBrief: sap });
+  await callApi({ imageGrant: grant() });
   assert.equal(calls.filter((call) => call.url.includes('/images/generations')).length, 1);
   assert.equal(calls.length, 2);
 });
@@ -131,7 +135,7 @@ test('regeneração recebe as correções e respeita o limite configurado', asyn
   process.env.IMAGE_REVIEW_ENABLED = 'true';
   process.env.IMAGE_REVIEW_MAX_REGENERATIONS = '1';
   reviews = [review(2, 'Corrigir o texto do menu'), review(5)];
-  const result = await callApi({ imageBrief: sap });
+  const result = await callApi({ imageGrant: grant() });
   const generations = calls.filter((call) => call.url.includes('/images/generations'));
   assert.equal(generations.length, 2);
   assert.ok(generations[1].body.prompt.includes('Corrigir o texto do menu'));
@@ -142,7 +146,7 @@ test('entrega a melhor versão se a regeneração sair pior', async () => {
   process.env.IMAGE_REVIEW_ENABLED = 'true';
   process.env.IMAGE_REVIEW_MAX_REGENERATIONS = '1';
   reviews = [review(3, 'Ajustar'), review(1)];
-  const result = await callApi({ imageBrief: sap });
+  const result = await callApi({ imageGrant: grant() });
   assert.ok(result.imageDataUrl.endsWith('imagem1'));
 });
 
@@ -150,13 +154,13 @@ test('imagem boa não gera custo extra', async () => {
   process.env.IMAGE_REVIEW_ENABLED = 'true';
   process.env.IMAGE_REVIEW_MAX_REGENERATIONS = '2';
   reviews = [review(5)];
-  await callApi({ imageBrief: sap });
+  await callApi({ imageGrant: grant() });
   assert.equal(calls.filter((call) => call.url.includes('/images/generations')).length, 1);
 });
 
 test('falha na avaliação entrega a imagem já gerada', async () => {
   process.env.IMAGE_REVIEW_ENABLED = 'true';
   reviews = ['resposta inválida'];
-  const result = await callApi({ imageBrief: sap });
+  const result = await callApi({ imageGrant: grant() });
   assert.ok(result.imageDataUrl.endsWith('imagem1'));
 });

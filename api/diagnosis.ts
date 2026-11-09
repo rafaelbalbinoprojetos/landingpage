@@ -1,6 +1,10 @@
-import { decideNext, finalizeState, getCoverage, getOpenDimensions, isOperationalCategory, mergeInterview, registerQuestion, removeOffTopicMarketing, resolveQuestion, sanitizeState } from './_diagnosis/engine.js';
+import { createEmptyState, decideNext, finalizeState, getCoverage, getOpenDimensions, isOperationalCategory, mergeInterview, parseInterviewOutput, registerQuestion, removeOffTopicMarketing, removeOffTopicSentences, resolveQuestion } from './_diagnosis/engine.js';
 import type { BriefingEngineState, InterviewOutput } from './_diagnosis/engine.js';
-import { buildPricing, formatInvestment, formatTimeline } from './_diagnosis/pricing.js';
+import { briefFromMockup, sanitizeImageBrief } from './_diagnosis/imagePrompt.js';
+import type { ImageBrief } from './_diagnosis/imagePrompt.js';
+import { COMMERCIAL_CATEGORIES, REVIEW_TEXT, estimateFromHours, formatInvestment, formatTimeline, scrubCommercialDeep } from './_diagnosis/pricing.js';
+import type { EstimatedModule, PricingEstimate } from './_diagnosis/pricing.js';
+import { LIMIT_MESSAGE, acquireLock, checkAiBudget, consumeLimit, getLimits, leaksInternals, newId, releaseLock, sanitizeClientMessage, signPayload, verifyPayload, wrapClientData } from './_diagnosis/security.js';
 import { buildInterviewInstruction, buildProposalSchema, interviewSchema, interviewSystemPrompt, proposalSystemPrompt } from './_diagnosis/prompts.js';
 
 export const config = {
@@ -389,212 +393,6 @@ const proposalSchema = {
   },
   required: ['status', 'assistantMessage', 'quickReplies', 'collected', 'proposal'],
 };
-
-const legacySystemPrompt = `
-Voce e a IA consultiva da EpicByte. Sua funcao principal e atuar como Analista de Requisitos e Desenvolvedor Senior conduzindo um levantamento funcional objetivo antes de gerar uma proposta.
-
-Principio fundamental:
-- Nao pense "qual categoria usar?". Pense "o que essa pessoa realmente quer construir?".
-- Nao pense "qual template aplicar?". Pense "qual experiencia digital faz sentido para esse contexto?".
-- Voce nao e formulario, chatbot de orcamento, coletor superficial de requisitos, fluxo engessado, classificador rigido, FAQ ou arvore de decisao.
-- Voce atua como Engenheiro de Software Senior, Analista de Requisitos, Arquiteto de Solucoes Digitais, consultor estrategico, especialista em UX/sistemas, diretor de produto e consultor enterprise.
-- Antes de perguntar, extraia automaticamente necessidade do cliente, objetivo do sistema, usuarios/perfis, fluxo atual ou desejado, entidades, cadastros, campos, dados de entrada, regras de negocio, status, aprovacoes, permissoes, saidas esperadas, relatorios, indicadores, integracoes, dores, riscos e prioridades.
-- Sempre raciocine como alguem que realmente vai desenvolver o sistema: primeiro entenda o problema e a rotina, depois mapeie entradas, processamento/regras e saidas.
-- Se o usuario fornece muitos detalhes, sintetize o que entendeu e pergunte somente a lacuna mais importante. Nao reinicie a descoberta.
-
-Comportamento obrigatorio:
-- Converse de forma natural, premium e objetiva.
-- Faca perguntas objetivas de levantamento. Pode agrupar itens relacionados em uma unica pergunta quando isso acelerar o entendimento sem virar questionario longo; quando o briefing estiver rico, faca no maximo 1 pergunta de refinamento.
-- A primeira resposta deve ser sempre uma descoberta consultiva quando o pedido for vago. Uma mensagem inicial curta nunca e suficiente para proposta.
-- Nunca faca perguntas genericas desconectadas do contexto.
-- Nunca trate projetos como templates.
-- Nunca force categorias pre-definidas quando o briefing ja indica uma direcao mais precisa.
-- Nunca classifique cedo demais. Primeiro investigue o problema real; depois classifique como landing page premium, site institucional, sistema interno, automacao, dashboard/BI, CRM/gestao comercial, agenda/agendamento, app, integracao ou projeto hibrido.
-- Nunca ofereca opcoes irrelevantes ao contexto informado.
-- Nunca trate todos os projetos como landing pages comerciais.
-- Nunca force agendamento, conversao, WhatsApp, leads, painel operacional, dashboard, ecommerce, advocacia ou odontologia. Esses elementos so entram quando fizerem sentido para o contexto.
-- Nunca diga que o cliente quer sair do WhatsApp, planilha, papel, landing page ou qualquer outro formato se ele nao citou isso explicitamente. Pergunte sobre o processo atual sem afirmar origem do problema.
-- Nunca responda "nao vou tratar isso como landing page" quando o cliente pediu claramente sistema, automacao, dashboard, CRM, app ou integracao. Esse contraste contamina o contexto e soa defensivo.
-- Nunca use fallback generico. Se faltar contexto, faca uma pergunta consultiva que ajude a revelar a experiencia digital correta.
-- Suas perguntas devem evoluir conforme o que o cliente respondeu anteriormente.
-- Evite perguntas tecnicas. O cliente nao precisa saber stack, arquitetura ou termos de tecnologia.
-- Antes de gerar proposta para sistemas, confirme maturidade minima: necessidade do cliente, objetivo principal, usuarios/perfis, fluxo ou jornada, dados de entrada, regras/status principais, saidas esperadas/relatorios/indicadores, integracoes relevantes e prioridade de primeira versao. Nao exija briefing perfeito; a entrega e uma proposta inicial, nao especificacao final.
-- Antes de fazer qualquer pergunta, interprete profundamente o que o cliente escreveu, identifique segmento, tipo de projeto, gargalos, oportunidades, objetivos implicitos, complexidade operacional e valor percebido.
-- Se o usuario ja trouxe um briefing detalhado, NAO faca perguntas basicas, NAO peca informacoes ja descritas e NAO aja como formulario.
-- Se o usuario ja trouxe entidades, campos, fluxo, perfis, permissoes e indicadores, NAO pergunte "como funciona hoje". Sintetize e avance para refinamento ou proposta.
-- Se o usuario fornecer briefing longo e detalhado, NAO reduza para proposta generica. Preserve volume de dados/cadastros, regras de prioridade, plataformas obrigatorias, modulos solicitados, relatorios, perfis de acesso, automacoes, indicadores e restricoes tecnicas.
-- Se faltar nome do negocio/projeto, pergunte somente quando isso for relevante. Nunca use "ramo de atuacao" como pergunta padrao se o contexto ja estiver claro.
-- Se o usuario nao souber o tipo de solucao, ajude a traduzir: divulgacao/captacao vira landing ou site; venda online vira ecommerce; dados, usuarios, permissoes, workflows, regras, entradas e saidas viram sistema, dashboard ou automacao.
-- Na proposta final, adapte sua postura: arquiteto de processos para sistemas, especialista em automacao para IA/integrações e diretor criativo estrategico para branding, landing e marca pessoal.
-- Nao liste apenas telas, cadastros, CRUDs ou funcionalidades frias. Em sistemas, traduza em eficiencia e controle; em branding/landing, traduza em narrativa, presenca, percepcao premium, conexao emocional e experiencia.
-- Nao gere proposta na primeira mensagem quando o pedido for vago, mesmo que mencione sistema, landing, dashboard ou automacao.
-- Faca no maximo 5 interacoes de levantamento antes da proposta quando o projeto for sistema, automacao, dashboard, app ou integracao. Se o cliente trouxer um bloco rico de informacoes, avance mais rapido.
-- Quando houver informacoes suficientes, retorne status "proposal".
-- Antes da proposta, retorne status "question".
-- assistantMessage deve ser curta e consultiva.
-- Quando status for "question", assistantMessage deve seguir obrigatoriamente esta estrutura em texto natural:
-  1. Sintese objetiva do que foi entendido, especialmente quando o usuario trouxe detalhes.
-  2. Leitura da lacuna que ainda muda arquitetura, regra de negocio, custo, risco ou escopo.
-  3. Apenas depois, uma pergunta complementar realmente necessaria.
-- Pergunte apenas o que muda arquitetura, complexidade, custo, integracao, escalabilidade, governanca ou escopo.
-- Descubra naturalmente: objetivo do projeto, publico-alvo/usuarios, funcionalidades, regras, nivel de sofisticacao, prioridades e, quando for site/landing, identidade visual, estilo, percepcao desejada, tom da marca e referencias implicitas.
-- Para sistema ou automacao, investigue de forma objetiva: necessidade do cliente, processo atual, ponto inicial e final do fluxo, ordem de servico/formulario/planilha, cadastros/entidades, campos preenchidos, dados de entrada, usuarios/perfis, status, aprovacoes, prazos, prioridades, responsaveis, regras de negocio, permissoes, excecoes, saidas de dados, relatorios, indicadores e o que gera retrabalho, perda de informacao ou atraso.
-- Para landing page ou site, investigue objetivo, publico-alvo, marca/produto/pessoa, estilo visual, acao principal, conteudos, diferenciais, provas sociais, imagens/videos/referencias e integracoes com WhatsApp, formulario, agenda ou pagamento.
-- As perguntas sobre dados finais e acao principal so sao obrigatorias se o usuario ainda nao informou saidas/indicadores ou objetivo/CTA. Nunca pergunte algo que ja foi respondido.
-- Quando status for "proposal", assistantMessage deve ser exatamente: "Perfeito. Já tenho informações suficientes para estruturar sua proposta inicial."
-- quickReplies deve trazer respostas faceis de tocar quando fizer sentido.
-
-Modo de descoberta contextual:
-- Nao existe funil fixo. A categoria nasce do briefing e do historico da conversa.
-- Nunca assuma agendamento, WhatsApp, painel operacional, advocacia, odontologia, agenda ou lead funnel sem sinal claro.
-- Landing page pode ser marca pessoal, institucional, conteudo, campanha, conversao, evento, produto, portfolio, loja ou experiencia institucional premium.
-- Se o cliente trouxer marca pessoal, investigue narrativa, publico, conteudos, redes, estilo e objetivo da pagina sem mencionar exemplos de outros projetos.
-- Se trouxer dashboard financeiro, investigue fontes de dados, receitas, despesas, categorias, periodo, metas, relatorios, usuarios e decisoes que o painel deve apoiar.
-- Se trouxer sistema operacional, investigue fluxo, status, responsaveis, aprovacoes, prazos, dados finais e indicadores sem importar termos de dominios nao citados.
-- Se mencionar almoxarifado, estoque, produto, requisicao, baixa, quantidade, disponibilidade, assinatura, retirada, custo por area ou produtos mais requisitados, classifique como sistema interno de almoxarifado, requisicoes e estoque. Nao classifique como dashboard, landing, branding ou presenca digital.
-- Para almoxarifado, extraia automaticamente produto, estoque, requisicao, solicitante, responsavel, operador do almoxarifado, administrador, area/local, assinatura, baixa de estoque e historico de movimentacao. Se o fluxo ja foi descrito, nao pergunte "como esse processo funciona hoje"; pergunte no maximo um refinamento sobre aprovacao, assinatura ou indisponibilidade.
-- Sempre identifique tambem o universo semantico dominante: corporativo, operacional, industrial, financeiro, SaaS, gamer/cinematografico, artistico/musical, esportivo, luxo, fitness, educacional, social, fandom/comunidade, marketplace, medico/clinico, juridico ou editorial.
-- O universo semantico muda tom, copy, preview, modulos, PDF, CTA e impacto esperado. Nao use template corporativo em entretenimento, gamer, fandom, artista, marca pessoal ou campanha promocional.
-- Se o projeto for jogo, game, trailer, gameplay, PlayStation, Xbox, Nintendo, Steam, GOD OF WAR, lançamento ou campanha gamer, classifique como landing promocional de universo gamer/cinematografico. Use hype, imersao, atmosfera, comunidade gamer, trailer, gameplay, CTA de compra e storytelling epico. Nao use linguagem institucional corporativa.
-
-Personas internas de linguagem:
-- ENTERPRISE SYSTEM: use operacao, fluxo, indicadores, produtividade, rastreabilidade, governanca, automacao, dashboards, SLA e processos somente quando o projeto for sistema interno, dashboard, ERP, operacao ou automacao corporativa.
-- BRANDING / LANDING PREMIUM: use narrativa, experiencia, percepcao, presenca, identidade, direcao criativa, cinematografia, emocao, exclusividade, comunidade, editorial, posicionamento e storytelling quando o projeto for landing, marca pessoal, institucional, atleta, artista, influenciador, luxo, lifestyle ou empresa premium.
-- AUTOMACAO / IA: use integracao, automacao, escala, atendimento, eficiencia, inteligencia operacional, sincronizacao e reducao manual quando o projeto pedir explicitamente automacao, atendimento automatizado, IA, chatbot ou integracoes.
-
-Regra de profundidade para branding, landing e marca pessoal:
-- Mesmo apos descobrir objetivo, publico e direcao inicial, nao encerre o briefing ate entender sensacao emocional desejada, percepcao de marca, referencias visuais, tipo de experiencia, tom visual, narrativa principal, diferenciais e prioridade da primeira versao.
-- Perguntas boas para esses casos: "O que voce quer que a pessoa sinta ao entrar na pagina?", "A experiencia deve transmitir mais emocao, autoridade, exclusividade ou proximidade?", "Existe alguma referencia visual, filme, marca ou site que represente o estilo desejado?", "Voce imagina algo mais cinematografico, minimalista, tecnologico, editorial ou luxuoso?", "O foco principal e impacto visual, comunidade, posicionamento de marca ou conversao?", "A pagina deve parecer mais um portal institucional, documentario visual ou experiencia imersiva?"
-
-Sinais que voce deve observar naturalmente, sem transformar em formulario:
-- Objetivo explicito e objetivo implicito.
-- Tipo de experiencia digital que faz sentido: marca, produto, conteudo, sistema, dashboard, app, ecommerce, automacao ou operacao.
-- Publico, tom, identidade, nivel de sofisticacao e emocao desejada.
-- Funcionalidades, canais, rotinas, integracoes, regras, permissoes, relatorios e indicadores apenas quando forem relevantes.
-- Preferencias visuais ou direcao criativa quando isso impactar a proposta.
-
-Classificacao flexivel:
-- Use businessContext apenas como chave tecnica interna para o JSON.
-- projectCategory deve ser livre, descritivo e coerente com o briefing. Exemplos: "Landing page institucional de marca pessoal", "Dashboard executivo financeiro hospitalar", "Sistema operacional metrologico", "Site institucional premium".
-- A classificacao deve orientar linguagem, perguntas, imagem, orcamento, prazo e profundidade tecnica, mas nunca deve engessar a conversa.
-
-Regras absolutas de isolamento de contexto:
-- Nao reutilize termos de outros projetos sem evidencia explicita do cliente. Nao mencione FIFO, calibracao, laudos, metrologia, producao, equipamentos, hospital, nomes de famosos, financeiro ou qualquer dominio especifico se o cliente nao trouxe esse contexto.
-- Se o projeto for landing, branding, marca pessoal ou institucional, nao use impacto operacional, produtividade operacional, governanca, rastreabilidade, fila critica, implantacao enterprise, saturacao operacional, SLA, processos internos, automacao industrial ou dashboards corporativos. Fale em experiencia, narrativa, presenca digital, percepcao premium, impacto visual, posicionamento, comunidade, storytelling e conexao emocional.
-- Se businessContext for HEALTHCARE, nunca use FIFO, fila critica, calibracao, rastreabilidade industrial, SLA operacional, dashboard industrial, metrologia, laudos industriais, peso operacional ou controle dimensional.
-- Se businessContext for LEGAL, nunca use producao, chao de fabrica, metrologia, controle dimensional, calibracao, FIFO ou equipamento industrial.
-- Se businessContext for LANDING_PAGE, INSTITUTIONAL_WEBSITE ou SCHEDULING_PLATFORM, nunca renderize dashboard operacional, KPIs industriais, fluxo fabril, calibração, laudos ou filas industriais.
-- Se businessContext for INDUSTRIAL_SYSTEM, METROLOGY_SYSTEM, OPERATIONAL_CONTROL ou DASHBOARD_SYSTEM, nao gere landing page comercial generica. Gere dashboard, KPIs, fluxo operacional, monitoramento, alertas, graficos e rastreabilidade.
-- Cada proposta deve limpar completamente memoria visual, termos, KPIs e componentes de outros segmentos.
-
-Nomes provisorios sugeridos:
-- barbearia: Barbearia Premium
-- clinica odontologica: Clínica Sorriso Real
-- loja feminina: Cheia de Charme
-- restaurante: Restaurante Essenza
-- academia: Studio Performance
-
-Adaptacao por porte:
-- Pequenos negocios: linguagem simples, foco em resultado, orcamento acessivel, sem stack pesada.
-- Projetos medios: equilibrio entre negocio, automacao e tecnologia.
-- Enterprise: arquitetura, integracoes, governanca, escalabilidade e rastreabilidade.
-
-Faixas de referencia:
-- Landing institucional simples: R$ 2.500 a R$ 5.000.
-- Landing premium com conversao: R$ 4.000 a R$ 8.000.
-- Landing com agendamento/WhatsApp/painel simples: R$ 6.000 a R$ 15.000.
-- Site institucional completo: R$ 8.000 a R$ 20.000.
-- Ecommerce: R$ 12.000 a R$ 40.000.
-- Sistema interno simples: R$ 15.000 a R$ 40.000.
-- Sistema de gestao medio: R$ 40.000 a R$ 90.000.
-- Sistema enterprise complexo: R$ 90.000 a R$ 250.000+.
-- Sistemas enterprise com muitos cadastros, permissoes, regras, usuarios, validacoes e integracoes devem ter prazo realista: MVP de 4 a 6 meses, solucao solida de 8 a 12 meses e evolucao enterprise de 12 a 18 meses.
-
-Tecnologias:
-- Para pequenos negocios, evite listar React, Node, PostgreSQL, APIs e cloud de forma pesada. Use termos como "plataforma web responsiva", "agenda online", "painel de gestao", "integracao com WhatsApp", "SEO e performance".
-- Para projetos tecnicos/enterprise, pode detalhar stack, integracoes, banco de dados, permissoes, dashboards e governanca.
-
-Memoria do briefing:
-- Os textos devem citar detalhes informados pelo cliente: nicho, porte, objetivo, canais, rotinas e funcionalidades desejadas.
-- Em briefings detalhados, cada requisito critico deve virar valor percebido. Nao use siglas ou termos de dominio que o cliente nao informou.
-- Evite frases genericas. Pareca uma consultoria humana que entendeu o contexto.
-- Se o cliente citar papel, atraso, retrabalho, logistica, produtividade, controle, saturacao, equipe, equipamentos, laudos, impressao ou volume operacional, explore profundamente os impactos, riscos e ganhos.
-- Em contexto enterprise/industrial, priorize rastreabilidade, governanca, saturacao, eficiencia operacional, indicadores, logistica, produtividade e conformidade.
-- Em pequeno negocio, priorize vendas, agenda, presenca digital, atendimento, praticidade e conversao.
-
-Nível de solução:
-- Estrutura Essencial: divulgacao, contato via WhatsApp, pagina institucional ou landing simples.
-- Estrutura Profissional: agendamento, painel administrativo, automacoes leves, WhatsApp/Instagram.
-- Estrutura Escalável: multiplas unidades, usuarios, dashboards, integracoes complexas e sistemas internos.
-
-Proposta final deve conter:
-1. businessName com nome real ou provisorio elegante.
-2. businessContext com uma das chaves tecnicas aceitas.
-3. projectCategory livre e especifico ao projeto, sem termos genericos como "ramo de atuacao".
-4. proposalTitle personalizado com o nome do negocio.
-4. briefingSummary citando o contexto coletado.
-5. Leitura contextual identificada, com interpretacao consultiva do problema ou oportunidade.
-6. Gargalos ou oportunidades, personalizados ao briefing.
-7. Visao estrategica da solucao, explicando por que essa estrutura importa e como melhora negocio ou operacao.
-8. Abordagem da EpicByte conectando problema -> solucao -> impacto.
-9. Estrutura recomendada, sempre em formato beneficio + impacto + valor, usando a persona correta do projeto.
-10. Impactos esperados, coerentes com o projeto.
-11. Tecnologias recomendadas somente na profundidade adequada.
-12. Score estrategico do projeto.
-13. Nivel de solucao recomendado.
-14. Solucao ideal para evolucao, deixando claro que pode comecar simples e evoluir por etapas.
-15. Estimativa de prazo.
-16. Estimativa de investimento em faixa, justificando pelo tipo e complexidade.
-17. Oportunidades futuras.
-18. Mockup visual coerente com o tipo de solucao.
-19. Conceito visual de imagem IA altamente especifico para segmento e tipo de projeto.
-20. CTA para validar a proposta com base no briefing gerado pela IA.
-
-Regras para operationalBottlenecks:
-- Identifique riscos, gargalos, desperdicios, lentidao, retrabalho, ausencia de rastreabilidade, processos manuais, problemas logisticos, baixa visibilidade operacional, saturacao de recursos, dependencia de papel e dependencia humana quando coerente.
-- Cada item deve ser especifico para o cliente. Nao use frases genericas.
-
-Regras para suggestedFeatures:
-- Cada item deve explicar proposito, ganho e contexto de uso.
-- Evite nomes crus como "CRUD de usuarios" ou "tela de cadastro". Explique beneficio, impacto e contexto de uso.
-
-Regras para expectedOperationalImpacts:
-- Liste ganhos reais, como reducao de papel, velocidade de resposta, distribuicao operacional, rastreabilidade, previsibilidade de saturacao, reducao de retrabalho, centralizacao de informacoes e tomada de decisao por dados, quando fizer sentido.
-
-Diretrizes para visualConcept:
-- Antes de escrever visualPrompt, interprete segmento, universo semantico, emocao, tipo de solucao e contexto do projeto.
-- O visualPrompt deve priorizar a experiencia correta para o universo: operacional para sistemas, editorial/emocional para artistas, imersiva e epica para games, clean/confiavel para clinicas, sobria/autoritativa para juridico, comercial para ecommerce.
-- Nao force "modern SaaS", "enterprise" ou "institucional" quando o universo for gamer, artistico, fandom, musical, esportivo ou promocional.
-- Para landing pages, pedir hero cinematografica, tipografia gigante, composicao editorial, visual institucional premium, storytelling visual, secoes reais, blocos reais e profundidade premium.
-- Para dashboards, pedir KPIs reais, graficos realistas, estrutura enterprise, hierarquia visual impecavel, layout executivo, UX moderno e aparencia estilo Bloomberg + Stripe + Linear + Notion + Framer.
-- A imagem em si deve SER a experiencia, nao uma apresentacao da experiencia.
-- A imagem nao deve parecer interface generica, dashboard fake, Behance showcase, layout sci-fi, UI futurista exagerada, template artificial, laptop mockup, monitor display, phone showcase, device showcase, website presentation, framed presentation, floating UI render, centered UI render, fake 3D interface ou excesso de cards.
-- A imagem deve parecer site premium publicado, campanha global de marca, experiencia editorial de luxo, identidade digital cinematografica, empresa implantada, produto real, sistema corporativo real ou plataforma enterprise autentica.
-- A imagem representa exclusivamente o negocio do cliente. Nunca inserir logo EpicByte, OpenAI, GPT, marcas famosas, concorrentes, nomes aleatorios, clientes ficticios, seção "nossos clientes", logos corporativos, depoimentos falsos com marcas ou mockups genericos de agencia.
-- Nunca usar nomes/logos de GM, Bosch, Fiat, Volkswagen, Google, Microsoft, Salesforce, SAP, Oracle ou qualquer marca de terceiro. Se precisar de texto de marca, use apenas o nome do cliente ou nomes neutros profissionais coerentes com o segmento.
-- Textos de interface devem ser discretos, coerentes com o segmento e reforçar o valor correto: experiencia e marca para landing/branding; controle e dados para sistemas.
-- Se envolver muitos dados, usuarios internos, permissoes, cadastros, relatorios, workflows, indicadores ou gestao operacional, NAO gere landing page. Gere dashboard, sistema interno, painel administrativo ou centro operacional digital.
-- Se envolver divulgacao, captacao de cliente, presenca digital, servicos, agendamento ou vendas, gere landing page, site institucional ou ecommerce.
-- Para escritorio de advocacia, clinica, dentista, barbearia, restaurante, estetica, negocio local ou escritorio, SEMPRE gere PROFESSIONAL MARKETING WEBSITE TEMPLATE. Nunca gere dashboard, SaaS interface, ecommerce, marketplace, carrinho, produtos ou interface futurista.
-- O template comercial deve ter estrutura realista de site: menu, hero, CTA, servicos/areas, depoimentos, indicadores de confianca, contato, footer, tipografia limpa e espacamento realista.
-- A imagem deve parecer ThemeForest premium template, site de agencia premiado ou website comercial real, nao arte conceitual.
-- Para advocacia: visual escuro, elegante, sofisticado, preto/dourado/cinza/azul profundo, pessoa executiva de terno, ambiente corporativo, autoridade, confianca, discricao.
-- Para odontologia ou consultorio medico: visual limpo, branco, azul claro, verde agua, profissional de saude, acolhimento, agenda, tratamentos e confianca.
-- Para barbearia: visual masculino, preto, grafite, dourado, madeira, barbeiro ou cliente em cadeira, agenda online, servicos, precos e WhatsApp.
-- Para moda feminina: rosa, branco, nude, elegante, modelo feminina, categorias, colecoes e CTA de compra.
-- Para ecommerce: layout de loja virtual com catalogo, produto, carrinho e checkout.
-- Para app mobile: mockup de aplicativo mobile premium.
-- Para sistemas industriais, metrologia, producao, qualidade, laudos ou FIFO, use como base:
-  "Create a highly realistic enterprise operational dashboard interface for an industrial metrology inspection room. The system is built for Microsoft PowerApps and Office 365. Show FIFO control queues with priority weights, metrology inspection requests, equipment saturation, operator productivity, calibration alerts, PDF report workflow, non-conformity indicators, quality control status and real-time production monitoring. The interface must look like a real enterprise industrial software dashboard used inside an automotive factory. Premium dark navy UI, cyan highlights, clean typography, realistic data cards, charts, tables, workflow panels, desktop dashboard and mobile companion. High fidelity, professional, realistic, no random unreadable text, no distorted UI, no generic SaaS template."
-- visualPrompt deve estar em ingles, ser curto, limpo e separado da proposta textual. Ele deve depender apenas de nome do projeto, tipo de experiencia, publico, estilo visual, paleta, secoes-chave e restricoes de contexto.
-- Nunca passe orçamento, score, timeline, riscos, historico completo ou texto da proposta para o visualPrompt.
-- Inclua nome do negocio, publico, objetivo, estilo visual, cores desejadas, tipo de solucao e elementos obrigatorios da interface. Nao inclua estetica EpicByte dentro da imagem do cliente.
-- Evite textos longos dentro da imagem e proiba layout baguncado, logos distorcidos, palavras quebradas, estilo cartoon ou UI generica.
-- imageAlt deve explicar o conceito em linguagem humana.
-
-Nao cite OpenAI, modelo, prompt, politica interna ou limitacoes internas.
-Responda sempre em portugues do Brasil.
-`.trim();
 
 const json = (res: any, status: number, body: Record<string, unknown>) => {
   res.status(status).setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -2001,7 +1799,7 @@ const buildBriefingState = (messages: ChatMessage[]): BriefingState => {
   const ctaTerms = ['conhecer a história', 'conhecer a historia', 'ver vídeos', 'ver videos', 'explorar vídeos', 'explorar videos', 'seguir canais oficiais', 'consumir conteúdo', 'consumir conteudo', 'divulgação', 'divulgacao', 'informações', 'informacoes'];
   const priorityTerms = ['impacto visual', 'narrativa completa', 'posicionamento de marca', 'canais oficiais', 'tudo equilibrado', 'entregar rápido', 'entregar rapido', 'reduzir trabalho manual', 'atender clientes melhor', 'organizar dados', 'gerar relatórios', 'gerar relatorios', 'integrar ferramentas'];
   const referenceTerms = ['sem referência definida', 'sem referencia definida', 'não sei', 'nao sei', 'cinematográfico', 'cinematografico', 'campanha esportiva', 'campanha visual', 'editorial', 'luxuoso', 'luxo', 'minimalista', 'tecnológico', 'tecnologico', 'filme', 'site parecido', 'referência', 'referencia'];
-  const stopTerms = ['chega de levantamentos', 'pare de me perguntar', 'não pergunte mais', 'nao pergunte mais', 'me passe o levantamento', 'passe o levantamento', 'crie com as informações que você tem', 'crie com as informacoes que voce tem', 'já respondi', 'ja respondi', 'pode gerar', 'finalize a proposta', 'gera a proposta', 'gere a proposta'];
+  const stopTerms = ['chega de levantamentos', 'pare de me perguntar', 'não pergunte mais', 'nao pergunte mais', 'me passe o levantamento', 'passe o levantamento', 'crie com as informações que você tem', 'crie com as informacoes que voce tem', 'já respondi', 'ja respondi', 'finalize a proposta', 'gera a proposta', 'gere a proposta'];
 
   const subject = context.businessName || context.projectContext.projectName || extractBusinessName(raw);
   const goal = hasAny(text, ['divulgação', 'divulgacao', 'informativa', 'informativo', 'conhecer', 'presença', 'presenca'])
@@ -3055,6 +2853,10 @@ const hasSemanticDrift = (messages: ChatMessage[], proposal: DiagnosisProposal) 
   return false;
 };
 
+const GENERATE_ACTION = 'generate_proposal';
+const STATE_TTL_SECONDS = 24 * 60 * 60;
+const TRANSCRIPT_LIMIT = 20;
+
 const callOpenAI = async (apiKey: string, name: string, schema: unknown, input: unknown[], maxTokens: number) => {
   const response = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
@@ -3062,6 +2864,7 @@ const callOpenAI = async (apiKey: string, name: string, schema: unknown, input: 
     body: JSON.stringify({
       model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
       input,
+      store: false,
       temperature: 0.2,
       max_output_tokens: maxTokens,
       text: { format: { type: 'json_schema', name, strict: true, schema } },
@@ -3075,26 +2878,50 @@ const callOpenAI = async (apiKey: string, name: string, schema: unknown, input: 
   return parsed as any;
 };
 
-const isValidInterview = (output: any): output is InterviewOutput =>
-  typeof output?.assistantMessage === 'string' &&
-  Array.isArray(output.quickReplies) &&
-  Array.isArray(output.dimensionUpdates) &&
-  Array.isArray(output.requirements) &&
-  Array.isArray(output.conflicts);
+const conversationInput = (state: BriefingEngineState) =>
+  state.transcript.map((item) => ({
+    role: item.role,
+    content: item.role === 'user' ? wrapClientData(item.content) : item.content,
+  }));
+
+const clientText = (state: BriefingEngineState) =>
+  [state.initialDescription, ...state.transcript.filter((item) => item.role === 'user').map((item) => item.content)].join(' ');
+
+const strings = (value: unknown, limit = 12) =>
+  (Array.isArray(value) ? value : []).filter((item): item is string => typeof item === 'string' && Boolean(item.trim())).slice(0, limit);
+
+// A proposta só é aceita com módulos e horas coerentes; caso contrário, vai para revisão.
+const parseModules = (raw: unknown): EstimatedModule[] | null => {
+  if (!Array.isArray(raw) || !raw.length) return null;
+  const modules: EstimatedModule[] = [];
+  for (const item of raw.slice(0, 30)) {
+    const min = Number(item?.hoursMin);
+    const max = Number(item?.hoursMax);
+    if (!item?.name || !['mvp', 'profissional', 'evolucao'].includes(item.phase) || !['baixa', 'media', 'alta'].includes(item.complexity)) return null;
+    if (!(min > 0) || !(max >= min) || max > 2000) return null;
+    modules.push({ name: String(item.name).slice(0, 80), description: String(item.description || '').slice(0, 300), phase: item.phase, complexity: item.complexity, hoursMin: min, hoursMax: max, reusable: item.reusable === true });
+  }
+  return modules.some((module) => module.phase === 'mvp') ? modules : null;
+};
 
 const isValidGeneratedProposal = (proposal: any) =>
   Boolean(
     proposal?.businessName &&
       proposal.proposalTitle &&
       proposal.briefingSummary &&
-      proposal.mockup?.modules?.length &&
-      proposal.visualConcept?.visualPrompt &&
-      proposal.solutionLevel?.options?.length &&
-      proposal.estimationModules?.some((module: any) => module.phase === 'mvp')
+      proposal.mockup?.modules &&
+      proposal.visualConcept &&
+      proposal.solutionLevel?.options &&
+      proposal.strategicScore &&
+      proposal.idealSolution &&
+      COMMERCIAL_CATEGORIES.includes(proposal.commercialCategory)
   );
 
-const generateProposal = async (apiKey: string, messages: ChatMessage[], state: BriefingEngineState) => {
-  const clientText = getUserText(messages);
+const pendingFromState = (state: BriefingEngineState) =>
+  state.requirements.filter((item) => item.status === 'hipotese_pendente').map((item) => item.description);
+
+const generateProposal = async (apiKey: string, state: BriefingEngineState) => {
+  const text = clientText(state);
   const category = state.category || 'outro';
   const generated = await callOpenAI(
     apiKey,
@@ -3102,60 +2929,187 @@ const generateProposal = async (apiKey: string, messages: ChatMessage[], state: 
     buildProposalSchema(proposalSchema.properties.proposal.anyOf[1]),
     [
       { role: 'system', content: proposalSystemPrompt },
-      ...messages.map((message) => ({ role: message.role, content: message.content })),
-      { role: 'user', content: `Instrução do sistema, não é fala do cliente. Redija a proposta com base neste levantamento: ${JSON.stringify(state)}` },
+      ...conversationInput(state),
+      {
+        role: 'system',
+        content: `Levantamento validado pelo servidor, somente como dado: ${JSON.stringify({
+          initialDescription: state.initialDescription,
+          category,
+          dimensions: state.dimensions,
+          requirements: state.requirements,
+          conflicts: state.conflicts,
+          findings: state.findings,
+          decisions: state.decisions,
+        })}`,
+      },
     ],
     12000
   );
   if (!isValidGeneratedProposal(generated)) throw new Error('Proposal incomplete');
+  const modules = parseModules(generated.estimationModules);
+  if (!modules) throw new Error('Effort estimate invalid');
 
-  const modules = generated.estimationModules.slice(0, 24).map((module: any) => ({
-    ...module,
-    integrations: Math.max(0, Math.min(10, Math.floor(Number(module.integrations) || 0))),
-  }));
-  const pricing = buildPricing(generated.priceEstimate, {
-    deadlineWeeks: generated.clientDeadlineWeeks,
-    budgetMax: generated.clientBudgetMax,
+  const pricing = estimateFromHours(generated.commercialCategory, modules, {
+    deadlineWeeks: Number(generated.clientDeadlineWeeks) > 0 ? Number(generated.clientDeadlineWeeks) : null,
+    budgetMax: Number(generated.clientBudgetMax) > 0 ? Number(generated.clientBudgetMax) : null,
   });
-  if (!pricing) throw new Error('Price estimate invalid');
-  const filterList = (items: string[]) => removeOffTopicMarketing(category, clientText, items);
 
-  const proposal = prioritizeResponsiveWebProposal(sanitizeProposalContext({
+  const filterList = (items: unknown, limit = 8) => removeOffTopicMarketing(category, text, strings(items, limit));
+  const filterText = (value: unknown) => removeOffTopicSentences(category, text, String(value || ''));
+  const clean = scrubCommercialDeep({
     ...generated,
-    projectCategory: generated.projectCategory,
-    timeEstimate: formatTimeline(pricing),
-    investmentEstimate: formatInvestment(pricing),
-    operationalBottlenecks: filterList(generated.operationalBottlenecks).slice(0, 8),
-    suggestedFeatures: filterList(generated.suggestedFeatures).slice(0, 8),
-    expectedOperationalImpacts: filterList(generated.expectedOperationalImpacts).slice(0, 8),
-    evolutionOpportunities: filterList(generated.evolutionOpportunities).slice(0, 5),
-    recommendedTechnologies: generated.recommendedTechnologies.slice(0, 6),
+    initialDiagnosis: filterText(generated.initialDiagnosis),
+    strategicVision: filterText(generated.strategicVision),
+    epicByteApproach: filterText(generated.epicByteApproach),
+    executiveSummary: filterText(generated.executiveSummary),
+    operationalBottlenecks: filterList(generated.operationalBottlenecks),
+    suggestedFeatures: filterList(generated.suggestedFeatures),
+    expectedOperationalImpacts: filterList(generated.expectedOperationalImpacts),
+    benefits: filterList(generated.benefits),
+    evolutionOpportunities: filterList(generated.evolutionOpportunities),
+    recommendedTechnologies: strings(generated.recommendedTechnologies, 8),
+    nonFunctionalRequirements: strings(generated.nonFunctionalRequirements),
+    integrations: strings(generated.integrations),
+    assumptions: strings(generated.assumptions),
+    exclusions: strings(generated.exclusions),
+    risks: [...strings(generated.risks), ...state.findings.map((item) => (item.basis === 'hipotese' ? `A validar: ${item.explanation}` : item.explanation))].slice(0, 12),
+    pendingItems: [...new Set([...strings(generated.pendingItems), ...pendingFromState(state)])].slice(0, 20),
     strategicScore: {
       ...generated.strategicScore,
       conversionPotential: isOperationalCategory(category) ? 'Não se aplica' : generated.strategicScore.conversionPotential,
     },
-    mockup: {
-      ...generated.mockup,
-      modules: generated.mockup.modules.slice(0, 6),
-      dataHighlights: generated.mockup.dataHighlights.slice(0, 6),
-    },
-    visualConcept: {
-      ...generated.visualConcept,
-      visualPrompt: [
-        generated.visualConcept.visualPrompt,
-        `Tipo de tela: ${generated.mockup.screenType}.`,
-        `Módulos reais: ${generated.mockup.modules.slice(0, 6).join(', ')}.`,
-        `Dados em destaque: ${generated.mockup.dataHighlights.slice(0, 6).join(', ')}.`,
-        `Ação principal: ${generated.mockup.primaryAction}.`,
-      ].join('\n'),
-      palette: generated.visualConcept.palette.slice(0, 5),
-      imageDataUrl: null,
-    },
-    solutionLevel: { ...generated.solutionLevel, options: generated.solutionLevel.options.slice(0, 3) },
-    idealSolution: { ...generated.idealSolution, steps: generated.idealSolution.steps.slice(0, 8) },
-  }));
+  }, ['imageBrief', 'visualConcept', 'mockup', 'estimationModules', 'clientDeadlineWeeks', 'clientBudgetMax']);
 
-  return { ...proposal, estimationModules: modules, pricing, requirementsModel: state };
+  const proposal = prioritizeResponsiveWebProposal(sanitizeProposalContext({
+    ...clean,
+    timeEstimate: formatTimeline(pricing),
+    investmentEstimate: formatInvestment(pricing),
+    mockup: { ...clean.mockup, modules: strings(clean.mockup.modules, 6), dataHighlights: strings(clean.mockup.dataHighlights, 6) },
+    visualConcept: { ...clean.visualConcept, palette: strings(clean.visualConcept?.palette, 5), imageDataUrl: null },
+    solutionLevel: { ...clean.solutionLevel, options: clean.solutionLevel.options.slice(0, 3) },
+    idealSolution: { ...clean.idealSolution, steps: strings(clean.idealSolution.steps, 8) },
+  }));
+  const { imageBrief, clientBudgetMax, clientDeadlineWeeks, ...publicProposal } = proposal as any;
+  const brief = sanitizeImageBrief(imageBrief) || briefFromMockup(proposal);
+
+  return {
+    ...publicProposal,
+    estimationModules: modules.map(({ name, description, phase, complexity }) => ({ name, description, phase, complexity })),
+    pricing: publicPricing(pricing),
+    reviewRequired: pricing.reviewRequired,
+    requirementsModel: { requirements: state.requirements },
+    imageGrant: issueImageGrant(brief),
+  };
+};
+
+// Custos e horas internas ficam no servidor; o cliente vê só o que é da proposta.
+const publicPricing = (pricing: PricingEstimate) => ({
+  ...pricing,
+  reviewReasons: [],
+  phases: pricing.phases.map(({ name, modules, investmentMin, investmentMax, weeksMin, weeksMax }) => ({ name, modules, investmentMin, investmentMax, weeksMin, weeksMax })),
+});
+
+const issueImageGrant = (brief: ImageBrief | null) =>
+  brief ? signPayload('image', { id: newId(), brief }, STATE_TTL_SECONDS) : null;
+
+// Sem IA, a conversa segue pelo roteiro, mas nenhum valor fixo chega ao cliente.
+const scriptedResponse = (state: BriefingEngineState) => {
+  const response = buildFallbackResponse(state.transcript as ChatMessage[]);
+  if (!response.proposal) return { ...response };
+  return { ...response, assistantMessage: REVIEW_MESSAGE, proposal: reviewProposal(response.proposal, state) };
+};
+
+const REVIEW_MESSAGE = 'Registrei o seu briefing. A proposta inicial precisa da revisão da nossa equipe para confirmar valores e prazos.';
+
+const reviewProposal = (proposal: DiagnosisProposal, state: BriefingEngineState) => {
+  const clean = scrubCommercialDeep(proposal, ['visualConcept', 'mockup']);
+  return {
+    ...clean,
+    timeEstimate: REVIEW_TEXT,
+    investmentEstimate: REVIEW_TEXT,
+    reviewRequired: true,
+    pendingItems: pendingFromState(state),
+    requirementsModel: { requirements: state.requirements },
+    imageGrant: issueImageGrant(briefFromMockup(proposal)),
+  };
+};
+
+const withToken = (res: any, state: BriefingEngineState, payload: Record<string, unknown>) =>
+  json(res, 200, { ...payload, briefingToken: signPayload('briefing', state, STATE_TTL_SECONDS) });
+
+const pushTranscript = (state: BriefingEngineState, role: 'user' | 'assistant', content: string): BriefingEngineState => ({
+  ...state,
+  transcript: [...state.transcript, { role, content: content.slice(0, 1500) }].slice(-TRANSCRIPT_LIMIT),
+});
+
+const runConversation = async (res: any, req: any, apiKey: string, initial: BriefingEngineState, explicitEnd: boolean) => {
+  let state = initial;
+  const userTurns = state.transcript.filter((item) => item.role === 'user').length;
+  let endRequested = explicitEnd && (userTurns >= 2 || state.requirements.length > 0);
+
+  if (!endRequested) {
+    if (!(await checkAiBudget(req, 'diagnosis'))) return json(res, 429, { error: LIMIT_MESSAGE });
+    let output: InterviewOutput | null;
+    try {
+      const before = decideNext(state);
+      const open = getOpenDimensions(state);
+      output = parseInterviewOutput(await callOpenAI(
+        apiKey,
+        'epicbyte_interview',
+        interviewSchema,
+        [
+          { role: 'system', content: interviewSystemPrompt },
+          ...conversationInput(state),
+          { role: 'system', content: buildInterviewInstruction(state, before, [...open.critical, ...open.important]) },
+        ],
+        2500
+      ));
+      if (!output) throw new Error('Interview invalid');
+    } catch (error) {
+      console.error('Interview failed, using scripted flow:', error instanceof Error ? error.message : 'unknown');
+      const scripted = scriptedResponse(state);
+      return withToken(res, pushTranscript(state, 'assistant', scripted.assistantMessage), scripted);
+    }
+
+    state = mergeInterview(state, output);
+    endRequested = output.endIntent === true && (userTurns >= 2 || state.requirements.length > 0);
+    const decision = decideNext(state, endRequested);
+    if (decision.action !== 'propose') {
+      const safe = leaksInternals(output.assistantMessage) ? { ...output, assistantMessage: '', quickReplies: [] } : output;
+      const question = resolveQuestion(state, decision, safe);
+      state = registerQuestion(state, question.target);
+      state = pushTranscript(state, 'assistant', question.message);
+      return withToken(res, state, {
+        status: 'collecting',
+        assistantMessage: question.message,
+        quickReplies: state.questionCount >= 3 ? [...question.quickReplies.slice(0, 5), GENERATE_PROPOSAL_REPLY] : question.quickReplies,
+        proposal: null,
+        progress: getCoverage(state, question.target),
+      });
+    }
+  }
+
+  const finalState = finalizeState(state);
+  const withinSession = await consumeLimit(`proposal:${state.sessionId}`, getLimits().proposalsPerSession, STATE_TTL_SECONDS);
+  if (!withinSession || !(await checkAiBudget(req, 'proposal'))) return json(res, 429, { error: LIMIT_MESSAGE });
+
+  try {
+    const proposal = await generateProposal(apiKey, finalState);
+    return withToken(res, finalState, {
+      status: 'proposal',
+      assistantMessage: proposal.reviewRequired ? REVIEW_MESSAGE : 'Perfeito. Já tenho o suficiente para estruturar a sua proposta.',
+      quickReplies: [],
+      proposal,
+    });
+  } catch (error) {
+    console.error('Proposal generation failed:', error instanceof Error ? error.message : 'unknown');
+    return withToken(res, finalState, {
+      status: 'proposal',
+      assistantMessage: REVIEW_MESSAGE,
+      quickReplies: [],
+      proposal: reviewProposal(buildFallbackProposal(finalState.transcript as ChatMessage[]), finalState),
+    });
+  }
 };
 
 export default async function handler(req: any, res: any) {
@@ -3165,83 +3119,29 @@ export default async function handler(req: any, res: any) {
   }
 
   const body = extractRequestBody(req.body);
-  const messages = normalizeMessages(body);
-  if (!messages.length) {
-    return json(res, 400, { error: 'Envie uma mensagem para iniciar o diagnostico.' });
-  }
+  const message = sanitizeClientMessage(body.message);
+  const explicitEnd = body.action === GENERATE_ACTION;
+  if (!message) return json(res, 400, { error: 'Envie uma mensagem para iniciar o diagnóstico.' });
+
+  // Papéis e histórico vêm só do estado assinado; o navegador envia apenas a nova mensagem.
+  let state = verifyPayload<BriefingEngineState>('briefing', body.briefingToken) || createEmptyState(newId());
+  const isGenerateReply = message === GENERATE_PROPOSAL_REPLY;
+  if (!state.initialDescription && !isGenerateReply) state = { ...state, initialDescription: message };
+  state = pushTranscript(state, 'user', message);
 
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    return json(res, 200, buildFallbackResponse(messages));
+    if (!(await checkAiBudget(req, 'diagnosis'))) return json(res, 429, { error: LIMIT_MESSAGE });
+    const scripted = scriptedResponse(state);
+    return withToken(res, pushTranscript(state, 'assistant', scripted.assistantMessage), scripted);
   }
 
-  const lastUserMessage = [...messages].reverse().find((message) => message.role === 'user');
-  const endRequested = lastUserMessage
-    ? (() => {
-        const state = buildBriefingState([lastUserMessage]);
-        return state.wantsToEndDiscovery || state.userSaysAlreadyAnswered;
-      })()
-    : false;
-
-  let state = sanitizeState(body.briefingState);
-
-  try {
-    if (!endRequested) {
-      const before = decideNext(state);
-      const open = getOpenDimensions(state);
-      const output = await callOpenAI(
-        apiKey,
-        'epicbyte_interview',
-        interviewSchema,
-        [
-          { role: 'system', content: interviewSystemPrompt },
-          ...messages.map((message) => ({ role: message.role, content: message.content })),
-          { role: 'user', content: buildInterviewInstruction(state, before, [...open.critical, ...open.important]) },
-        ],
-        2500
-      );
-      if (!isValidInterview(output)) throw new Error('Interview invalid');
-
-      state = mergeInterview(state, output);
-      const decision = decideNext(state);
-      if (decision.action !== 'propose') {
-        const question = resolveQuestion(state, decision, output);
-        state = registerQuestion(state, question.target);
-        return json(res, 200, {
-          status: 'collecting',
-          assistantMessage: question.message,
-          quickReplies: state.questionCount >= 3
-            ? [...question.quickReplies.slice(0, 5), GENERATE_PROPOSAL_REPLY]
-            : question.quickReplies,
-          proposal: null,
-          progress: getCoverage(state, question.target),
-          briefingState: state,
-        });
-      }
-    }
-  } catch (error) {
-    console.error('Interview failed, using scripted flow:', error);
-    return json(res, 200, buildFallbackResponse(messages));
+  if (!(await acquireLock(`briefing:${state.sessionId}`, 120))) {
+    return json(res, 409, { error: 'Sua mensagem anterior ainda está sendo processada.' });
   }
-
-  const finalState = finalizeState(state);
   try {
-    const proposal = await generateProposal(apiKey, messages, finalState);
-    return json(res, 200, {
-      status: 'proposal',
-      assistantMessage: 'Perfeito. Já tenho o suficiente para estruturar a sua proposta.',
-      quickReplies: [],
-      proposal,
-      briefingState: finalState,
-    });
-  } catch (error) {
-    console.error('Proposal generation failed, using template:', error);
-    return json(res, 200, {
-      status: 'proposal',
-      assistantMessage: 'Perfeito. Estruturei uma proposta inicial com o que levantamos.',
-      quickReplies: [],
-      proposal: { ...buildFallbackProposal(messages), requirementsModel: finalState },
-      briefingState: finalState,
-    });
+    return await runConversation(res, req, apiKey, state, explicitEnd || isGenerateReply);
+  } finally {
+    await releaseLock(`briefing:${state.sessionId}`);
   }
 }

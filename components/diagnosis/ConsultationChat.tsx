@@ -47,27 +47,15 @@ const getSupportedAudioMimeType = () => {
 
 const generateConceptImage = async (proposal: DiagnosisProposal, style = 'auto'): Promise<DiagnosisProposal> => {
   try {
-    console.log('Calling image generation...');
     const response = await fetch('/api/diagnosis-image', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        prompt: proposal.visualConcept.visualPrompt,
-        imageBrief: proposal.imageBrief,
-        style,
-        projectData: {
-          businessName: proposal.businessName,
-          projectCategory: proposal.projectCategory,
-          mockup: proposal.mockup
-        }
-      })
+      body: JSON.stringify({ imageGrant: proposal.imageGrant, style })
     });
 
     const rawResponse = await response.text();
-    console.log('Image generation HTTP status:', response.status);
-    console.log('Image generation raw response:', rawResponse);
 
     let data: { imageDataUrl?: string | null; error?: string; reason?: string; model?: string };
     try {
@@ -75,15 +63,13 @@ const generateConceptImage = async (proposal: DiagnosisProposal, style = 'auto')
     } catch {
       data = {
         imageDataUrl: null,
-        error: `Resposta inválida do endpoint de imagem. Status ${response.status}.`,
-        reason: rawResponse.slice(0, 500)
+        error: 'Não foi possível gerar o preview visual agora.'
       };
     }
 
-    console.log('Image generation result:', data);
     const imageError = data.imageDataUrl
       ? null
-      : [data.error, data.reason ? `Detalhe técnico: ${data.reason}` : null].filter(Boolean).join(' ');
+      : data.error || 'Não foi possível gerar o preview visual agora.';
     return {
       ...proposal,
       visualConcept: {
@@ -118,7 +104,7 @@ const loadStoredLead = (): LeadInfo | null => {
 
 const ConsultationChat: React.FC = () => {
   const runIdRef = useRef(0);
-  const briefingStateRef = useRef<unknown>(null);
+  const briefingStateRef = useRef<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([initialAssistantMessage]);
   const [input, setInput] = useState('');
   const [quickReplies, setQuickReplies] = useState<string[]>(starterSuggestions);
@@ -165,7 +151,7 @@ const ConsultationChat: React.FC = () => {
     stopActiveRecording(false);
   };
 
-  const requestDiagnosis = async (nextMessages: ChatMessage[]) => {
+  const requestDiagnosis = async (messageText: string, action?: string) => {
     setIsLoading(true);
     setError('');
     setQuickReplies([]);
@@ -176,10 +162,7 @@ const ConsultationChat: React.FC = () => {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          messages: nextMessages.filter((message) => message.id !== initialAssistantMessage.id),
-          briefingState: briefingStateRef.current
-        })
+        body: JSON.stringify({ message: messageText, action, briefingToken: briefingStateRef.current })
       });
 
       const data = (await response.json()) as DiagnosisApiResponse & { error?: string };
@@ -187,7 +170,7 @@ const ConsultationChat: React.FC = () => {
         throw new Error(data?.error || 'Não foi possível continuar o diagnóstico.');
       }
 
-      briefingStateRef.current = data.briefingState ?? briefingStateRef.current;
+      briefingStateRef.current = data.briefingToken ?? briefingStateRef.current;
       const assistantMessage = createMessage('assistant', data.assistantMessage);
       setMessages((current) => [...current, assistantMessage]);
 
@@ -211,15 +194,14 @@ const ConsultationChat: React.FC = () => {
     }
   };
 
-  const sendMessage = async (value: string) => {
+  const sendMessage = async (value: string, action?: string) => {
     const trimmed = value.trim();
     if (!trimmed || isLoading || isStructuring || proposal || pendingProposal) return;
 
     const userMessage = createMessage('user', trimmed);
-    const nextMessages = [...messages, userMessage];
-    setMessages(nextMessages);
+    setMessages((current) => [...current, userMessage]);
     setInput('');
-    await requestDiagnosis(nextMessages);
+    await requestDiagnosis(trimmed, action);
   };
 
   const clearRecordingTimeout = () => {
@@ -355,7 +337,7 @@ const ConsultationChat: React.FC = () => {
 
   const handleSuggestion = (suggestion: string) => {
     if (suggestion === 'Já respondi, gere a proposta') {
-      void sendMessage(suggestion);
+      void sendMessage(suggestion, 'generate_proposal');
       return;
     }
     setInput((current) => {
@@ -462,6 +444,9 @@ const ConsultationChat: React.FC = () => {
           Responda em linguagem natural. A IA interpreta o contexto, aprofunda requisitos e transforma o briefing em um
           documento estratégico quando houver informação suficiente.
         </p>
+        <p className="relative mb-6 -mt-3 max-w-3xl text-xs leading-relaxed text-fog">
+          As mensagens são processadas por serviços de inteligência artificial. Não informe senhas, documentos ou dados sensíveis de terceiros.
+        </p>
 
         <div className="relative space-y-4">
           <ConversationFlow
@@ -484,7 +469,7 @@ const ConsultationChat: React.FC = () => {
               aria-valuetext={progress.total === 100 ? `${progress.current}% do levantamento: ${progress.label}` : `Pergunta ${progress.current} de até ${progress.total}: ${progress.label}`}
             >
               <div className="flex items-center justify-between gap-3 text-xs text-fog">
-                <span>{progress.total === 100 ? `${progress.current}% do levantamento` : `Pergunta ${progress.current} de até ${progress.total}`}</span>
+                <span>{progress.total === 100 ? `Cobertura estimada: ${progress.current}%` : `Pergunta ${progress.current} de até ${progress.total}`}</span>
                 <span className="text-ion">{progress.label}</span>
               </div>
               <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/10">

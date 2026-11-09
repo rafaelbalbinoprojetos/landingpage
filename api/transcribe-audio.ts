@@ -1,3 +1,5 @@
+import { LIMIT_MESSAGE, checkAiBudget } from './_diagnosis/security.js';
+
 export const config = {
   api: {
     bodyParser: false,
@@ -79,6 +81,8 @@ export default async function handler(req: any, res: any) {
     res.setHeader('Allow', 'POST');
     return json(res, 405, { error: 'Method not allowed.' });
   }
+
+  if (!(await checkAiBudget(req, 'transcribe'))) return json(res, 429, { text: '', error: LIMIT_MESSAGE });
 
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
