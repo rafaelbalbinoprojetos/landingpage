@@ -1,3 +1,12 @@
+import { decideNext, finalizeState, getCoverage, getOpenDimensions, isOperationalCategory, mergeInterview, registerQuestion, removeOffTopicMarketing, resolveQuestion, sanitizeState } from './_diagnosis/engine.js';
+import type { BriefingEngineState, InterviewOutput } from './_diagnosis/engine.js';
+import { buildPricing, formatInvestment, formatTimeline } from './_diagnosis/pricing.js';
+import { buildInterviewInstruction, buildProposalSchema, interviewSchema, interviewSystemPrompt, proposalSystemPrompt } from './_diagnosis/prompts.js';
+
+export const config = {
+  maxDuration: 120,
+};
+
 type ChatMessage = {
   role: 'user' | 'assistant';
   content: string;
@@ -582,64 +591,6 @@ Diretrizes para visualConcept:
 - Inclua nome do negocio, publico, objetivo, estilo visual, cores desejadas, tipo de solucao e elementos obrigatorios da interface. Nao inclua estetica EpicByte dentro da imagem do cliente.
 - Evite textos longos dentro da imagem e proiba layout baguncado, logos distorcidos, palavras quebradas, estilo cartoon ou UI generica.
 - imageAlt deve explicar o conceito em linguagem humana.
-
-Nao cite OpenAI, modelo, prompt, politica interna ou limitacoes internas.
-Responda sempre em portugues do Brasil.
-`.trim();
-
-const systemPrompt = `
-Você é um consultor técnico especializado em levantamento de requisitos para sistemas digitais sob medida.
-
-REGRAS ABSOLUTAS:
-- Conduza UMA pergunta por vez. Nunca agrupe perguntas.
-- Nunca assuma o tipo de projeto. Baseie-se APENAS no que o cliente disse.
-- Se o cliente disser "clínica", é clínica. Se disser "loja", é loja. Nunca invente contexto.
-- Mantenha o foco no que foi dito. Nunca mude o assunto.
-- Não use jargões técnicos na conversa. Fale como um consultor humano, direto e empático.
-- Não force landing page, dashboard, CRM, WhatsApp, agendamento, ecommerce ou automação sem o cliente ter dado sinal claro.
-- Se o cliente responder parcialmente, continue da etapa atual ou da próxima lacuna mais importante.
-- Os quickReplies devem ser respostas diretas e clicáveis à pergunta que você acabou de fazer, adaptadas ao negócio do cliente. Nunca ofereça opções sobre outro assunto.
-- Nunca repita uma pergunta nem peça de novo algo que o cliente já disse. Nunca pergunte de forma aberta "o que você gostaria?".
-- Comece com uma frase curta que mostre que entendeu a resposta anterior e, em seguida, faça a pergunta.
-- A etapa a perguntar é informada na última instrução do sistema. Pergunte somente sobre ela.
-
-FLUXO DE LEVANTAMENTO:
-São no máximo 6 etapas, nesta ordem, pulando o que o cliente já respondeu:
-1. Confirmar o tipo de projeto e objetivo principal.
-2. Identificar quem vai usar o sistema, incluindo usuários finais e administrativos.
-3. Entender o processo atual, ou seja, como funciona hoje sem o sistema.
-4. Mapear as funcionalidades principais desejadas.
-5. Identificar integrações ou restrições técnicas.
-6. Entender prazo e prioridade da primeira versão.
-
-REGRA DE PROPOSTA:
-- Quando tiver informação suficiente para as 6 etapas, gere status "proposal".
-- Antes disso, gere status "collecting".
-- A proposta deve respeitar estritamente o contexto informado pelo cliente.
-- Se o cliente pedir para gerar a proposta antes das 6 etapas, gere com o que tiver e deixe claro que é uma proposta inicial.
-- Ao sugerir a solução, dê prioridade para um site ou sistema web responsivo, acessível por navegador, com boa experiência em computadores, celulares e tablets.
-- Só recomende aplicativo mobile nativo quando o cliente pedir explicitamente app iOS/Android ou houver uma justificativa forte. Caso contrário, prefira web responsivo/PWA.
-- Em recommendedTechnologies, mockup, timeEstimate e strategicVision, deixe claro que a primeira versão deve funcionar bem em desktop, telefone e tablet.
-- Se o cliente descreve clínica odontológica com landing page, agendamento, pacientes, dentistas, prontuário, financeiro e indicadores, classifique como "plataforma web odontológica com landing page, agendamento online e gestão interna". Nunca reduza isso para "dashboard operacional".
-- Para clínicas, use linguagem de pacientes, dentistas, agenda, tratamentos, prontuário, comparecimento, recepção e administração. Não use fila operacional, criticidade industrial, saturação operacional ou rastreabilidade fabril.
-- Antes de gerar a proposta, separe duas coisas: DOMÍNIO do cliente e TIPO DE SOLUÇÃO. Exemplo: escritório de direito é domínio jurídico; a solução pode ser site institucional, landing page, portal do cliente ou sistema interno. Celebridade é domínio de marca pessoal; a solução pode ser landing editorial, portal oficial ou campanha. Nunca transforme domínio em outro domínio.
-- Se o cliente pedir página, landing, site institucional ou presença digital, não gere sistema de gestão, dashboard ou ERP, exceto se ele também pedir controle interno, usuários, cadastros, permissões ou relatórios.
-- Se o cliente pedir sistema de gestão, não gere landing page como solução principal; a landing pode ser módulo complementar apenas se o cliente pedir captação, apresentação pública ou conversão.
-
-DIREÇÃO DO visualConcept.visualPrompt:
-- Descreva a tela principal da solução deste cliente, em português, com 120 a 220 palavras. Ela será entregue a um gerador de imagens.
-- Baseie-se no que o cliente disse: nome do negócio, perfis de usuário, módulos e dados reais do briefing.
-- Liste o menu com os módulos reais, de 3 a 4 indicadores com rótulo e valor fictício plausível, o gráfico principal e o que ele compara, a tabela ou lista principal com colunas e 3 linhas de exemplo, e a ação principal.
-- Todo texto da tela deve estar em português do Brasil. Defina uma paleta coerente com o segmento, com códigos hexadecimais.
-- Para site ou landing page, descreva as seções reais, a mensagem do hero e a ação principal, em vez de painéis.
-- Não inclua preço, prazo, score, marca EpicByte, nem pedidos genéricos como "moderno e bonito". Seja concreto.
-
-FORMATO DE RESPOSTA:
-Retorne somente JSON válido no schema solicitado.
-- assistantMessage: pergunta ou comentário curto.
-- status: "collecting" ou "proposal".
-- quickReplies: 3 a 6 opções específicas ao contexto atual.
-- proposal: null enquanto coleta; objeto completo quando for proposta.
 
 Nao cite OpenAI, modelo, prompt, politica interna ou limitacoes internas.
 Responda sempre em portugues do Brasil.
@@ -3104,6 +3055,109 @@ const hasSemanticDrift = (messages: ChatMessage[], proposal: DiagnosisProposal) 
   return false;
 };
 
+const callOpenAI = async (apiKey: string, name: string, schema: unknown, input: unknown[], maxTokens: number) => {
+  const response = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
+      input,
+      temperature: 0.2,
+      max_output_tokens: maxTokens,
+      text: { format: { type: 'json_schema', name, strict: true, schema } },
+    }),
+  });
+  if (!response.ok) throw new Error(`OpenAI ${response.status}`);
+  const data = await response.json();
+  if (data?.output?.[0]?.content?.[0]?.type === 'refusal') throw new Error('OpenAI refusal');
+  const parsed = safeParseJson(extractOutputText(data));
+  if (!parsed) throw new Error('OpenAI invalid JSON');
+  return parsed as any;
+};
+
+const isValidInterview = (output: any): output is InterviewOutput =>
+  typeof output?.assistantMessage === 'string' &&
+  Array.isArray(output.quickReplies) &&
+  Array.isArray(output.dimensionUpdates) &&
+  Array.isArray(output.requirements) &&
+  Array.isArray(output.conflicts);
+
+const isValidGeneratedProposal = (proposal: any) =>
+  Boolean(
+    proposal?.businessName &&
+      proposal.proposalTitle &&
+      proposal.briefingSummary &&
+      proposal.mockup?.modules?.length &&
+      proposal.visualConcept?.visualPrompt &&
+      proposal.solutionLevel?.options?.length &&
+      proposal.estimationModules?.some((module: any) => module.phase === 'mvp')
+  );
+
+const generateProposal = async (apiKey: string, messages: ChatMessage[], state: BriefingEngineState) => {
+  const clientText = getUserText(messages);
+  const category = state.category || 'outro';
+  const generated = await callOpenAI(
+    apiKey,
+    'epicbyte_proposal',
+    buildProposalSchema(proposalSchema.properties.proposal.anyOf[1]),
+    [
+      { role: 'system', content: proposalSystemPrompt },
+      ...messages.map((message) => ({ role: message.role, content: message.content })),
+      { role: 'user', content: `Instrução do sistema, não é fala do cliente. Redija a proposta com base neste levantamento: ${JSON.stringify(state)}` },
+    ],
+    12000
+  );
+  if (!isValidGeneratedProposal(generated)) throw new Error('Proposal incomplete');
+
+  const modules = generated.estimationModules.slice(0, 24).map((module: any) => ({
+    ...module,
+    integrations: Math.max(0, Math.min(10, Math.floor(Number(module.integrations) || 0))),
+  }));
+  const pricing = buildPricing(generated.priceEstimate, {
+    deadlineWeeks: generated.clientDeadlineWeeks,
+    budgetMax: generated.clientBudgetMax,
+  });
+  if (!pricing) throw new Error('Price estimate invalid');
+  const filterList = (items: string[]) => removeOffTopicMarketing(category, clientText, items);
+
+  const proposal = prioritizeResponsiveWebProposal(sanitizeProposalContext({
+    ...generated,
+    projectCategory: generated.projectCategory,
+    timeEstimate: formatTimeline(pricing),
+    investmentEstimate: formatInvestment(pricing),
+    operationalBottlenecks: filterList(generated.operationalBottlenecks).slice(0, 8),
+    suggestedFeatures: filterList(generated.suggestedFeatures).slice(0, 8),
+    expectedOperationalImpacts: filterList(generated.expectedOperationalImpacts).slice(0, 8),
+    evolutionOpportunities: filterList(generated.evolutionOpportunities).slice(0, 5),
+    recommendedTechnologies: generated.recommendedTechnologies.slice(0, 6),
+    strategicScore: {
+      ...generated.strategicScore,
+      conversionPotential: isOperationalCategory(category) ? 'Não se aplica' : generated.strategicScore.conversionPotential,
+    },
+    mockup: {
+      ...generated.mockup,
+      modules: generated.mockup.modules.slice(0, 6),
+      dataHighlights: generated.mockup.dataHighlights.slice(0, 6),
+    },
+    visualConcept: {
+      ...generated.visualConcept,
+      visualPrompt: [
+        generated.visualConcept.visualPrompt,
+        `Tipo de tela: ${generated.mockup.screenType}.`,
+        `Módulos reais: ${generated.mockup.modules.slice(0, 6).join(', ')}.`,
+        `Dados em destaque: ${generated.mockup.dataHighlights.slice(0, 6).join(', ')}.`,
+        `Ação principal: ${generated.mockup.primaryAction}.`,
+      ].join('\n'),
+      palette: generated.visualConcept.palette.slice(0, 5),
+      imageDataUrl: null,
+    },
+    solutionLevel: { ...generated.solutionLevel, options: generated.solutionLevel.options.slice(0, 3) },
+    idealSolution: { ...generated.idealSolution, steps: generated.idealSolution.steps.slice(0, 8) },
+  }));
+
+  return { ...proposal, estimationModules: modules, pricing, requirementsModel: state };
+};
+
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
@@ -3116,131 +3170,78 @@ export default async function handler(req: any, res: any) {
     return json(res, 400, { error: 'Envie uma mensagem para iniciar o diagnostico.' });
   }
 
-  const briefingState = buildBriefingState(messages);
-  if (briefingState.wantsToEndDiscovery || briefingState.userSaysAlreadyAnswered) {
-    return json(res, 200, buildFallbackResponse(messages));
-  }
-
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     return json(res, 200, buildFallbackResponse(messages));
   }
 
-  const briefingIsMature = hasRequirementsMaturity(messages);
-  const currentProgress = getRequirementProgress(messages);
-  const conversationHistory = messages.map((message) => ({
-    role: message.role,
-    content: message.content,
-  }));
+  const lastUserMessage = [...messages].reverse().find((message) => message.role === 'user');
+  const endRequested = lastUserMessage
+    ? (() => {
+        const state = buildBriefingState([lastUserMessage]);
+        return state.wantsToEndDiscovery || state.userSaysAlreadyAnswered;
+      })()
+    : false;
+
+  let state = sanitizeState(body.briefingState);
 
   try {
-    const response = await fetch('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || 'gpt-4.1-mini',
-        input: [
-          { role: 'system', content: systemPrompt },
-          ...conversationHistory,
-          {
-            role: 'user',
-            content: briefingIsMature
-              ? 'O levantamento terminou. Gere status "proposal" agora e não faça nova pergunta.'
-              : `Instrução do sistema, não é fala do cliente: esta é a pergunta ${currentProgress.current} de no máximo ${currentProgress.total}. Pergunte somente ${requirementTopics[currentProgress.current].instruction}. Os quickReplies devem responder a essa pergunta.`,
-          },
+    if (!endRequested) {
+      const before = decideNext(state);
+      const open = getOpenDimensions(state);
+      const output = await callOpenAI(
+        apiKey,
+        'epicbyte_interview',
+        interviewSchema,
+        [
+          { role: 'system', content: interviewSystemPrompt },
+          ...messages.map((message) => ({ role: message.role, content: message.content })),
+          { role: 'user', content: buildInterviewInstruction(state, before, [...open.critical, ...open.important]) },
         ],
-        temperature: 0.2,
-        max_output_tokens: 7000,
-        text: {
-          format: {
-            type: 'json_schema',
-            name: 'epicbyte_guided_diagnosis',
-            strict: true,
-            schema: proposalSchema,
-          },
-        },
-      }),
-    });
+        2500
+      );
+      if (!isValidInterview(output)) throw new Error('Interview invalid');
 
-    if (!response.ok) {
-      return json(res, 200, buildFallbackResponse(messages));
+      state = mergeInterview(state, output);
+      const decision = decideNext(state);
+      if (decision.action !== 'propose') {
+        const question = resolveQuestion(state, decision, output);
+        state = registerQuestion(state, question.target);
+        return json(res, 200, {
+          status: 'collecting',
+          assistantMessage: question.message,
+          quickReplies: state.questionCount >= 3
+            ? [...question.quickReplies.slice(0, 5), GENERATE_PROPOSAL_REPLY]
+            : question.quickReplies,
+          proposal: null,
+          progress: getCoverage(state, question.target),
+          briefingState: state,
+        });
+      }
     }
+  } catch (error) {
+    console.error('Interview failed, using scripted flow:', error);
+    return json(res, 200, buildFallbackResponse(messages));
+  }
 
-    const data = await response.json();
-    const refusal = data?.output?.[0]?.content?.[0];
-    if (refusal?.type === 'refusal') {
-      return json(res, 200, buildFallbackResponse(messages));
-    }
-
-    const payload = safeParseJson(extractOutputText(data));
-    if (!validatePayload(payload)) {
-      return json(res, 200, buildFallbackResponse(messages));
-    }
-
-    if (payload.status === 'proposal' && !briefingIsMature) {
-      return json(res, 200, buildFallbackResponse(messages));
-    }
-
-    if (payload.status === 'collecting' && briefingIsMature) {
-      return json(res, 200, {
-        ...buildFallbackResponse(messages),
-        status: 'proposal',
-        assistantMessage: 'Perfeito. Já tenho informações suficientes para estruturar sua proposta inicial.',
-        quickReplies: [],
-        proposal: buildFallbackProposal(messages),
-      });
-    }
-
-    const proposal = payload.proposal
-      ? (hasSemanticDrift(messages, payload.proposal) || isDentalClinicManagementBriefing(getUserText(messages)) || isInventoryWarehouseBriefing(getUserText(messages)) || inferContext(messages).projectContext.semanticUniverse === 'gamer_cinematografico')
-        ? buildFallbackProposal(messages)
-        : prioritizeResponsiveWebProposal(sanitizeProposalContext({
-          ...payload.proposal,
-          operationalBottlenecks: payload.proposal.operationalBottlenecks.slice(0, 8),
-          suggestedFeatures: payload.proposal.suggestedFeatures.slice(0, 8),
-          expectedOperationalImpacts: payload.proposal.expectedOperationalImpacts.slice(0, 8),
-          recommendedTechnologies: payload.proposal.recommendedTechnologies.slice(0, 6),
-          evolutionOpportunities: payload.proposal.evolutionOpportunities.slice(0, 5),
-          mockup: {
-            ...payload.proposal.mockup,
-            modules: payload.proposal.mockup.modules.slice(0, 6),
-            dataHighlights: payload.proposal.mockup.dataHighlights.slice(0, 6),
-          },
-          visualConcept: {
-            ...payload.proposal.visualConcept,
-            visualPrompt: [
-              payload.proposal.visualConcept.visualPrompt,
-              `Tipo de tela: ${payload.proposal.mockup.screenType}.`,
-              `Módulos reais: ${payload.proposal.mockup.modules.slice(0, 6).join(', ')}.`,
-              `Dados em destaque: ${payload.proposal.mockup.dataHighlights.slice(0, 6).join(', ')}.`,
-              `Ação principal: ${payload.proposal.mockup.primaryAction}.`,
-            ].join('\n'),
-            palette: payload.proposal.visualConcept.palette.slice(0, 5),
-            imageDataUrl: null,
-          },
-          solutionLevel: {
-            ...payload.proposal.solutionLevel,
-            options: payload.proposal.solutionLevel.options.slice(0, 3),
-          },
-          idealSolution: {
-            ...payload.proposal.idealSolution,
-            steps: payload.proposal.idealSolution.steps.slice(0, 8),
-          },
-        }))
-      : null;
-
+  const finalState = finalizeState(state);
+  try {
+    const proposal = await generateProposal(apiKey, messages, finalState);
     return json(res, 200, {
-      status: payload.status,
-      assistantMessage: payload.assistantMessage,
-      quickReplies: payload.status === 'collecting' ? withGenerateOption(payload.quickReplies.slice(0, 6), messages) : [],
-      collected: payload.collected,
+      status: 'proposal',
+      assistantMessage: 'Perfeito. Já tenho o suficiente para estruturar a sua proposta.',
+      quickReplies: [],
       proposal,
-      ...(payload.status === 'collecting' ? { progress: currentProgress } : {}),
+      briefingState: finalState,
     });
   } catch (error) {
-    return json(res, 200, buildFallbackResponse(messages));
+    console.error('Proposal generation failed, using template:', error);
+    return json(res, 200, {
+      status: 'proposal',
+      assistantMessage: 'Perfeito. Estruturei uma proposta inicial com o que levantamos.',
+      quickReplies: [],
+      proposal: { ...buildFallbackProposal(messages), requirementsModel: finalState },
+      briefingState: finalState,
+    });
   }
 }

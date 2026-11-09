@@ -333,6 +333,79 @@ export const PDFInvestment = (ctx: PdfContext) => {
   listCards(ctx, getReducedRisks(proposal).concat(proposal.evolutionOpportunities, proposal.idealSolution.steps).slice(0, 7), margin, 162, contentWidth);
 };
 
+const levelLabel = (level: string) => (level === 'media' ? 'média' : level);
+
+const flowSections = (ctx: PdfContext, pageTitle: string, sections: Array<{ title: string; items: string[] }>) => {
+  const { doc, margin, contentWidth, height } = ctx;
+  const bottom = height - 22;
+  addNewPage(ctx, pageTitle);
+  let y = 52;
+  const ensureSpace = (needed: number) => {
+    if (y + needed <= bottom) return;
+    addNewPage(ctx, pageTitle);
+    y = 52;
+  };
+
+  sections.filter((section) => section.items.length).forEach((section) => {
+    ensureSpace(16);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    setText(doc, colors.cyan);
+    doc.text(section.title, margin, y);
+    y += 7;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9.5);
+    setText(doc, colors.soft);
+    section.items.forEach((item) => {
+      const lines = doc.splitTextToSize(item, contentWidth) as string[];
+      ensureSpace(lines.length * 4.8 + 2);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9.5);
+      setText(doc, colors.soft);
+      doc.text(lines, margin, y);
+      y += lines.length * 4.8 + 2;
+    });
+    y += 5;
+  });
+};
+
+export const PDFDetailedScope = (ctx: PdfContext) => {
+  const { proposal } = ctx;
+  if (!proposal.estimationModules?.length) return;
+  const modules = (phase: string) =>
+    (proposal.estimationModules || []).filter((module) => module.phase === phase).map((module) => `${module.name}: ${module.description} (complexidade ${levelLabel(module.complexity)})`);
+  const pricing = proposal.pricing;
+  flowSections(ctx, 'Escopo, premissas e riscos', [
+    { title: 'Resumo executivo', items: proposal.executiveSummary ? [proposal.executiveSummary] : [] },
+    { title: 'MVP', items: modules('mvp') },
+    { title: 'Versão profissional', items: modules('profissional') },
+    { title: 'Evolução futura', items: modules('evolucao') },
+    { title: 'Arquitetura proposta', items: proposal.architecture ? [proposal.architecture] : [] },
+    { title: 'Benefícios', items: proposal.benefits || [] },
+    {
+      title: 'Composição do investimento',
+      items: pricing
+        ? [pricing.deadlineAlert, pricing.budgetAlert, pricing.infrastructureNote, pricing.licensesNote, ...pricing.assumptions].filter((item): item is string => Boolean(item))
+        : [],
+    },
+    { title: 'Premissas', items: proposal.assumptions || [] },
+    { title: 'Fora do escopo', items: proposal.exclusions || [] },
+    { title: 'Riscos', items: proposal.risks || [] },
+  ]);
+};
+
+export const PDFRequirements = (ctx: PdfContext) => {
+  const requirements = ctx.proposal.requirementsModel?.requirements || [];
+  if (!requirements.length) return;
+  const group = (status: string) =>
+    requirements.filter((item) => item.status === status).map((item) => `${item.id} [prioridade ${levelLabel(item.priority)}] ${item.description}${item.dependencies.length ? ` (depende de ${item.dependencies.join(', ')})` : ''}`);
+  flowSections(ctx, 'Requisitos levantados', [
+    { title: 'Confirmados pelo cliente', items: group('confirmado') },
+    { title: 'Recomendações da EpicByte', items: group('recomendacao') },
+    { title: 'Hipóteses a validar', items: group('hipotese_pendente') },
+  ]);
+};
+
 export const PDFNextSteps = (ctx: PdfContext) => {
   const template = getProposalTemplate(ctx.proposal);
   addNewPage(ctx, template.nextStepsTitle);
@@ -385,6 +458,8 @@ export const generateProposalPdf = async (proposal: DiagnosisProposal, lead: Lea
   PDFImpacts(ctx);
   PDFImplementationTimeline(ctx);
   PDFInvestment(ctx);
+  PDFDetailedScope(ctx);
+  PDFRequirements(ctx);
   PDFNextSteps(ctx);
 
   const name = sanitizeFileName(lead?.companyName || proposal.businessName || lead?.name || 'Proposta');

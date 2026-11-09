@@ -104,6 +104,41 @@ export type DiagnosisProposal = {
   successIndicators?: string[];
   executiveSummary?: string;
   roiNarrative?: string;
+  imageBrief?: unknown;
+  architecture?: string;
+  benefits?: string[];
+  assumptions?: string[];
+  exclusions?: string[];
+  risks?: string[];
+  estimationModules?: Array<{
+    name: string;
+    description: string;
+    phase: 'mvp' | 'profissional' | 'evolucao';
+    complexity: 'baixa' | 'media' | 'alta';
+    integrations: number;
+  }>;
+  pricing?: {
+    source: 'estimativa_ia';
+    phases: Array<{ name: string; modules: string[]; investmentMin: number; investmentMax: number; weeksMin: number; weeksMax: number }>;
+    maintenanceMonthlyMin: number;
+    maintenanceMonthlyMax: number;
+    infrastructureNote: string;
+    licensesNote: string;
+    assumptions: string[];
+    deadlineAlert: string | null;
+    budgetAlert: string | null;
+  };
+  requirementsModel?: { requirements: ProposalRequirement[] };
+};
+
+export type ProposalRequirement = {
+  id: string;
+  kind: string;
+  description: string;
+  priority: 'alta' | 'media' | 'baixa';
+  origin: 'cliente' | 'recomendacao_epicbyte' | 'hipotese';
+  status: 'confirmado' | 'recomendacao' | 'hipotese_pendente';
+  dependencies: string[];
 };
 
 export type DiagnosisApiResponse = {
@@ -112,4 +147,5 @@ export type DiagnosisApiResponse = {
   quickReplies: string[];
   proposal: DiagnosisProposal | null;
   progress?: { current: number; total: number; label: string };
+  briefingState?: unknown;
 };

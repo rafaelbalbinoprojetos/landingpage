@@ -5,6 +5,7 @@ import ImpactAndRisks from './ImpactAndRisks';
 import ImplementationTimeline from './ImplementationTimeline';
 import OperationalAnalysis from './OperationalAnalysis';
 import PricingCard from './PricingCard';
+import ProposalDetails from './ProposalDetails';
 import ProposalActions from './ProposalActions';
 import SolutionLevel from './SolutionLevel';
 import StrategicScore from './StrategicScore';
@@ -15,6 +16,7 @@ interface ProposalRevealProps {
   proposal: DiagnosisProposal;
   lead: LeadInfo | null;
   onLeadChange: (lead: LeadInfo) => void;
+  onRegenerateImage?: (style: string) => Promise<boolean>;
 }
 
 const RevealBlock: React.FC<{ children: React.ReactNode; delay: number }> = ({ children, delay }) => (
@@ -26,7 +28,7 @@ const RevealBlock: React.FC<{ children: React.ReactNode; delay: number }> = ({ c
   </div>
 );
 
-const ProposalReveal: React.FC<ProposalRevealProps> = ({ proposal, lead, onLeadChange }) => {
+const ProposalReveal: React.FC<ProposalRevealProps> = ({ proposal, lead, onLeadChange, onRegenerateImage }) => {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   return (
@@ -66,7 +68,7 @@ const ProposalReveal: React.FC<ProposalRevealProps> = ({ proposal, lead, onLeadC
       </RevealBlock>
 
       <RevealBlock delay={260}>
-        <VisualPreview proposal={proposal} onOpenFullPreview={() => setIsPreviewOpen(true)} />
+        <VisualPreview proposal={proposal} onOpenFullPreview={() => setIsPreviewOpen(true)} onRegenerateImage={onRegenerateImage} />
       </RevealBlock>
 
       <RevealBlock delay={380}>
@@ -100,6 +102,10 @@ const ProposalReveal: React.FC<ProposalRevealProps> = ({ proposal, lead, onLeadC
 
       <RevealBlock delay={980}>
         <PricingCard proposal={proposal} />
+      </RevealBlock>
+
+      <RevealBlock delay={1040}>
+        <ProposalDetails proposal={proposal} />
       </RevealBlock>
 
       <RevealBlock delay={1100}>

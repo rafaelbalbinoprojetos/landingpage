@@ -6,7 +6,18 @@ import { DiagnosisProposal } from './types';
 interface VisualPreviewProps {
   proposal: DiagnosisProposal;
   onOpenFullPreview: () => void;
+  onRegenerateImage?: (style: string) => Promise<boolean>;
 }
+
+// Cada geração tem custo, então o visitante tem um número limitado de novas versões.
+const MAX_STYLE_REGENERATIONS = 2;
+
+const imageStyles = [
+  { id: 'glassmorphism_premium', label: 'Glassmorphism Premium' },
+  { id: 'enterprise_dark', label: 'Enterprise Dark' },
+  { id: 'minimal_light', label: 'Minimal Light' },
+  { id: 'futuristic_tech', label: 'Futuristic Tech' },
+];
 
 const getPreviewContext = (proposal: DiagnosisProposal) => {
   const persona = getProposalPersona(proposal);
@@ -63,8 +74,8 @@ const getPreviewContext = (proposal: DiagnosisProposal) => {
         ['Produto sem estoque', 'Reposição sugerida', 'Crítico'],
       ],
       metrics: [
-        ['Disponibilidade', '92%'],
-        ['Baixas hoje', '38'],
+        ['Disponibilidade', 'Em tempo real'],
+        ['Baixas', 'Rastreadas'],
         ['Risco', 'Estoque mínimo'],
       ],
       panelNote: 'Painel de almoxarifado com requisições, estoque, baixa, assinatura e consumo por área',
@@ -90,7 +101,7 @@ const getPreviewContext = (proposal: DiagnosisProposal) => {
         ['Inspeção lote produção', 'Fila 04', 'Em análise'],
       ],
       metrics: [
-        ['Saturação', '78%'],
+        ['Saturação', 'Monitorada'],
         ['Produtividade', '+Visível'],
         ['Risco', 'Monitorado'],
       ],
@@ -142,7 +153,7 @@ const getPreviewContext = (proposal: DiagnosisProposal) => {
             { label: 'Credibilidade', value: 'Alta', icon: TrendingUp },
           ]
         : [
-            { label: 'Conversões', value: '+31%', icon: TrendingUp },
+            { label: 'Conversões', value: 'Acompanhadas', icon: TrendingUp },
             { label: 'Agenda', value: 'Online', icon: CalendarDays },
             { label: 'Atendimento', value: 'WhatsApp', icon: MessageCircle },
           ],
@@ -155,7 +166,7 @@ const getPreviewContext = (proposal: DiagnosisProposal) => {
       [isHealthcare ? 'Retorno de paciente' : isLegal ? 'Lead qualificado' : 'Retorno pendente', 'Contato', 'Acompanhar'],
     ],
     metrics: [
-      ['Conversão', '+31%'],
+      ['Conversão', 'Acompanhada'],
       ['Atendimento', 'Online'],
       ['Risco', 'Baixo'],
     ],
@@ -164,7 +175,22 @@ const getPreviewContext = (proposal: DiagnosisProposal) => {
   };
 };
 
-const VisualPreview: React.FC<VisualPreviewProps> = ({ proposal, onOpenFullPreview }) => {
+const VisualPreview: React.FC<VisualPreviewProps> = ({ proposal, onOpenFullPreview, onRegenerateImage }) => {
+  const [style, setStyle] = useState(imageStyles[0].id);
+  const [regenerations, setRegenerations] = useState(0);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const [regenerationError, setRegenerationError] = useState('');
+
+  const regenerate = async () => {
+    if (!onRegenerateImage || isRegenerating || regenerations >= MAX_STYLE_REGENERATIONS) return;
+    setIsRegenerating(true);
+    setRegenerationError('');
+    setRegenerations((current) => current + 1);
+    const succeeded = await onRegenerateImage(style);
+    if (!succeeded) setRegenerationError('Não foi possível gerar nesse estilo agora. A imagem anterior foi mantida.');
+    setIsRegenerating(false);
+  };
+
   const { mockup, visualConcept } = proposal;
   const [activeTab, setActiveTab] = useState<'executive' | 'operational'>('executive');
   const palette = visualConcept.palette.length ? visualConcept.palette : ['#67e8f9', '#60a5fa', '#a78bfa'];
@@ -179,7 +205,7 @@ const VisualPreview: React.FC<VisualPreviewProps> = ({ proposal, onOpenFullPrevi
             <img
               src={visualConcept.imageDataUrl}
               alt={visualConcept.imageAlt}
-              className="absolute inset-0 h-full w-full object-cover"
+              className="absolute inset-0 h-full w-full object-contain"
             />
           ) : (
             <div
@@ -196,6 +222,32 @@ const VisualPreview: React.FC<VisualPreviewProps> = ({ proposal, onOpenFullPrevi
           </p>
           <h4 className="font-display text-2xl leading-tight text-white">{visualConcept.title}</h4>
           <p className="mt-3 max-w-4xl text-sm leading-relaxed text-slate-300">{visualConcept.imageAlt}</p>
+          <p className="mt-2 text-xs text-slate-400">Imagem conceitual: textos e valores são ilustrativos, não dados reais.</p>
+          {onRegenerateImage && regenerations < MAX_STYLE_REGENERATIONS ? (
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <label className="text-xs text-slate-300" htmlFor="image-style">Estilo visual</label>
+              <select
+                id="image-style"
+                value={style}
+                onChange={(event) => setStyle(event.target.value)}
+                disabled={isRegenerating}
+                className="min-h-[40px] rounded-md border border-white/15 bg-[#07111f] px-3 text-sm text-slate-100"
+              >
+                {imageStyles.map((item) => (
+                  <option key={item.id} value={item.id}>{item.label}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={regenerate}
+                disabled={isRegenerating}
+                className="min-h-[40px] rounded-md border border-cyan-300/40 px-4 text-sm font-semibold text-cyan-100 transition-colors hover:bg-cyan-300/10 disabled:cursor-wait disabled:opacity-60"
+              >
+                {isRegenerating ? 'Gerando, pode levar alguns minutos...' : 'Gerar neste estilo'}
+              </button>
+            </div>
+          ) : null}
+          {regenerationError ? <p role="alert" className="mt-3 text-xs text-amber-100">{regenerationError}</p> : null}
           <div className="mt-4 flex flex-wrap gap-2">
             <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-3 py-1.5 text-[10px] uppercase tracking-[0.14em] text-cyan-100">
               {context.replaceAll('_', ' ')}

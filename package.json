@@ -9,7 +9,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "esbuild tests/*.test.ts --bundle --platform=node --format=esm --outdir=node_modules/.cache/tests --log-level=warning && node node_modules/.cache/tests/diagnosis.test.js && node node_modules/.cache/tests/imagePrompt.test.js",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "jspdf": "^4.2.1",

@@ -45,16 +45,24 @@ const getSupportedAudioMimeType = () => {
   return options.find((type) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(type)) || '';
 };
 
-const generateConceptImage = async (proposal: DiagnosisProposal): Promise<DiagnosisProposal> => {
+const generateConceptImage = async (proposal: DiagnosisProposal, style = 'auto'): Promise<DiagnosisProposal> => {
   try {
-    console.log('Visual prompt:', proposal.visualConcept.visualPrompt);
     console.log('Calling image generation...');
     const response = await fetch('/api/diagnosis-image', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ prompt: proposal.visualConcept.visualPrompt })
+      body: JSON.stringify({
+        prompt: proposal.visualConcept.visualPrompt,
+        imageBrief: proposal.imageBrief,
+        style,
+        projectData: {
+          businessName: proposal.businessName,
+          projectCategory: proposal.projectCategory,
+          mockup: proposal.mockup
+        }
+      })
     });
 
     const rawResponse = await response.text();
@@ -110,6 +118,7 @@ const loadStoredLead = (): LeadInfo | null => {
 
 const ConsultationChat: React.FC = () => {
   const runIdRef = useRef(0);
+  const briefingStateRef = useRef<unknown>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([initialAssistantMessage]);
   const [input, setInput] = useState('');
   const [quickReplies, setQuickReplies] = useState<string[]>(starterSuggestions);
@@ -138,6 +147,7 @@ const ConsultationChat: React.FC = () => {
 
   const resetConversation = () => {
     runIdRef.current += 1;
+    briefingStateRef.current = null;
     setMessages([initialAssistantMessage]);
     setInput('');
     setQuickReplies(starterSuggestions);
@@ -166,7 +176,10 @@ const ConsultationChat: React.FC = () => {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ messages: nextMessages.filter((message) => message.id !== initialAssistantMessage.id) })
+        body: JSON.stringify({
+          messages: nextMessages.filter((message) => message.id !== initialAssistantMessage.id),
+          briefingState: briefingStateRef.current
+        })
       });
 
       const data = (await response.json()) as DiagnosisApiResponse & { error?: string };
@@ -174,6 +187,7 @@ const ConsultationChat: React.FC = () => {
         throw new Error(data?.error || 'Não foi possível continuar o diagnóstico.');
       }
 
+      briefingStateRef.current = data.briefingState ?? briefingStateRef.current;
       const assistantMessage = createMessage('assistant', data.assistantMessage);
       setMessages((current) => [...current, assistantMessage]);
 
@@ -467,10 +481,10 @@ const ConsultationChat: React.FC = () => {
               aria-valuemin={0}
               aria-valuemax={progress.total}
               aria-valuenow={progress.current}
-              aria-valuetext={`Pergunta ${progress.current} de até ${progress.total}: ${progress.label}`}
+              aria-valuetext={progress.total === 100 ? `${progress.current}% do levantamento: ${progress.label}` : `Pergunta ${progress.current} de até ${progress.total}: ${progress.label}`}
             >
               <div className="flex items-center justify-between gap-3 text-xs text-fog">
-                <span>Pergunta {progress.current} de até {progress.total}</span>
+                <span>{progress.total === 100 ? `${progress.current}% do levantamento` : `Pergunta ${progress.current} de até ${progress.total}`}</span>
                 <span className="text-ion">{progress.label}</span>
               </div>
               <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/10">
@@ -553,7 +567,18 @@ const ConsultationChat: React.FC = () => {
             <p className="text-xs uppercase tracking-[0.16em]">Proposta estratégica gerada</p>
           </div>
           <VoiceSummary proposal={proposal} lead={leadInfo} />
-          <ProposalReveal proposal={proposal} lead={leadInfo} onLeadChange={saveLead} />
+          <ProposalReveal
+            proposal={proposal}
+            lead={leadInfo}
+            onLeadChange={saveLead}
+            onRegenerateImage={async (style) => {
+              const runId = runIdRef.current;
+              const updated = await generateConceptImage(proposal, style);
+              // Mantém a imagem anterior se a nova geração falhar.
+              if (runId === runIdRef.current && updated.visualConcept.imageDataUrl) setProposal(updated);
+              return Boolean(updated.visualConcept.imageDataUrl);
+            }}
+          />
         </div>
       ) : null}
     </div>

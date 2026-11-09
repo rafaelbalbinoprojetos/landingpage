@@ -1,3 +1,6 @@
+import { briefFromMockup, buildImagePrompt, buildReviewPrompt, getImageSize, getReviewConfig, imageReviewSchema, sanitizeImageBrief, scoreReview } from './_diagnosis/imagePrompt.js';
+import type { ImageBrief, ImageReview } from './_diagnosis/imagePrompt.js';
+
 export const config = {
   maxDuration: 180,
 };
@@ -372,10 +375,72 @@ const generateImageWithNanoBanana = async (apiKey: string, prompt: string) => {
 // Limite abaixo do maxDuration, para sobrar tempo ao Gemini como reserva.
 const OPENAI_IMAGE_TIMEOUT_MS = 120_000;
 
-const generateImageWithOpenAI = async (apiKey: string, prompt: string) => {
+const FUNCTION_LIMIT_MS = 180_000;
+
+const reviewImage = async (apiKey: string, imageDataUrl: string, brief: ImageBrief, model: string): Promise<ImageReview | null> => {
+  try {
+    const response = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model,
+        input: [{
+          role: 'user',
+          content: [
+            { type: 'input_text', text: buildReviewPrompt(brief) },
+            { type: 'input_image', image_url: imageDataUrl },
+          ],
+        }],
+        text: { format: { type: 'json_schema', name: 'image_review', strict: true, schema: imageReviewSchema } },
+      }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!response.ok) throw new Error(`Review ${response.status}`);
+    const data = await response.json();
+    const output = data?.output_text || data?.output?.flatMap((item: any) => item?.content || []).find((part: any) => part?.text)?.text;
+    const review = JSON.parse(output);
+    if (!review?.scores || typeof review.corrections !== 'string') throw new Error('Review invalid');
+    return review;
+  } catch (error) {
+    // A avaliação é opcional: se falhar, a imagem já gerada é entregue.
+    console.error('Image review failed:', error);
+    return null;
+  }
+};
+
+const generateReviewedImage = async (apiKey: string, brief: ImageBrief, style: unknown, startedAt: number) => {
+  const size = getImageSize(brief);
+  const config = getReviewConfig();
+  let best = await generateImageWithOpenAI(apiKey, buildImagePrompt(brief, style), size);
+  if (!config.enabled) return best;
+
+  let bestScore = -1;
+  let attempts = 0;
+  let current = best;
+  for (;;) {
+    const review = await reviewImage(apiKey, current.imageDataUrl, brief, config.model);
+    if (!review) return best;
+    const score = scoreReview(review);
+    if (score > bestScore) {
+      best = current;
+      bestScore = score;
+    }
+    console.log('Image review:', { score, attempts, scores: review.scores });
+    const remaining = FUNCTION_LIMIT_MS - (Date.now() - startedAt);
+    if (score >= config.minScore || attempts >= config.maxRegenerations || remaining < OPENAI_IMAGE_TIMEOUT_MS + 25_000) return best;
+    attempts += 1;
+    try {
+      current = await generateImageWithOpenAI(apiKey, buildImagePrompt(brief, style, review.corrections), size);
+    } catch (error) {
+      console.error('Image regeneration failed:', error);
+      return best;
+    }
+  }
+};
+
+const generateImageWithOpenAI = async (apiKey: string, prompt: string, size = '1536x1024') => {
   const model = String(process.env.OPENAI_IMAGE_MODEL || '').trim() || 'gpt-image-2.5-sunburst';
   const quality = String(process.env.OPENAI_IMAGE_QUALITY || '').trim() || 'high';
-  const size = '1536x1024';
   const response = await fetch('https://api.openai.com/v1/images/generations', {
     method: 'POST',
     headers: {
@@ -421,20 +486,24 @@ export default async function handler(req: any, res: any) {
   }
 
   const body = extractRequestBody(req.body);
+  const startedAt = Date.now();
   const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
-  if (!prompt) {
-    return json(res, 400, { error: 'Prompt visual obrigatorio.' });
+  const brief = sanitizeImageBrief(body.imageBrief) || briefFromMockup(body.projectData);
+  if (!brief && !prompt) {
+    return json(res, 400, { error: 'Dados visuais obrigatorios.' });
   }
 
-  const imagePrompt = buildDirectImagePrompt(prompt);
+  const imagePrompt = brief ? buildImagePrompt(brief, body.style) : buildDirectImagePrompt(prompt);
 
   try {
-    console.log('Visual prompt:', prompt);
+    console.log('Image prompt:', imagePrompt);
     let image;
     if (openAiKey) {
       try {
         console.log('Calling OpenAI image generation...');
-        image = await generateImageWithOpenAI(openAiKey, imagePrompt);
+        image = brief
+          ? await generateReviewedImage(openAiKey, brief, body.style, startedAt)
+          : await generateImageWithOpenAI(openAiKey, imagePrompt);
       } catch (openAiError) {
         console.error('OpenAI image generation failed:', openAiError);
         if (!apiKey) throw openAiError;
@@ -446,7 +515,7 @@ export default async function handler(req: any, res: any) {
         image = await generateImageWithNanoBanana(apiKey, imagePrompt);
       } catch (primaryError) {
         console.error('Nano Banana raw prompt failed, retrying with compact prompt:', primaryError);
-        image = await generateImageWithNanoBanana(apiKey, compactPromptForRetry(prompt));
+        image = await generateImageWithNanoBanana(apiKey, compactPromptForRetry(imagePrompt));
       }
     }
     if (!image) throw new Error('IMAGE_GENERATION_FAILED');
